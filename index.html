@@ -53,14 +53,12 @@
 
     <!-- Script Logique & Configuration en dur -->
     <script>
+        // CONFIGURATION
         // ==========================================
-        // CONFIGURATION EN DUR (À remplacer par tes clés)
+        const SUPABASE_URL = "https://thbqkeugjvsxbryfnzuo.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_2-Ij-nrTPeK6rB-kSD-QTg_b42zNakq";
+        const GEMINI_API_KEY = "AQ.Ab8RN6IvsGKP4haGmYZpyKYUsOwF9fFKbQVfK-qCdn_5rcbw6A";
         // ==========================================
-        const SUPABASE_URL = "https://TON_PROJET.supabase.co";
-        const SUPABASE_ANON_KEY = "TON_SUPABASE_ANON_KEY";
-        const GEMINI_API_KEY = "TA_CLE_API_GEMINI";
-        // ==========================================
-
         // Initialisation de Supabase
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
