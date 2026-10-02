@@ -41,7 +41,7 @@ details label input{margin-right:8px;transform:scale(1.4)}
 <nav><button data-a="tab" data-v="rec">Recettes</button><button data-a="tab" data-v="pan">Paniers</button><button data-a="tab" data-v="cou">Courses</button></nav>
 <div id="m" hidden><button class="x" data-a="close">✕ Fermer</button><div id="mc"></div></div>
 <script>
-const SUPABASE_URL="https://XXXX.supabase.co", SUPABASE_KEY="TA_CLE_ANON";
+const SUPABASE_URL="https://thbqkeugjvsxbryfnzuo.supabase.co", SUPABASE_KEY="sb_publishable_2-Ij-nrTPeK6rB-kSD-QTg_b42zNakq";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=s=>document.querySelector(s);
 const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[];const ET={};
