@@ -40,13 +40,14 @@ details label input{margin-right:8px;transform:scale(1.4)}
 </style></head><body>
 <header><input id="q" placeholder="Rechercher…" autocomplete="off"><div id="bar"></div></header>
 <main id="list"></main>
-<nav><button data-a="tab" data-v="rec">Recettes</button><button data-a="tab" data-v="pan">Paniers</button><button data-a="tab" data-v="cou">Courses</button></nav>
+<nav><button data-a="tab" data-v="rec">Recettes</button><button data-a="tab" data-v="pan">Paniers</button><button data-a="tab" data-v="cou">Courses</button><button data-a="tab" data-v="sto">Stock</button></nav>
 <div id="m" hidden><button class="x" data-a="close">✕ Fermer</button><div id="mc"></div></div>
 <script>
-const SUPABASE_URL="https://XXXX.supabase.co", SUPABASE_KEY="TA_CLE_ANON";
+        const SUPABASE_URL = "https://thbqkeugjvsxbryfnzuo.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_2-Ij-nrTPeK6rB-kSD-QTg_b42zNakq";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=s=>document.querySelector(s);
-const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[];const ET={};
+const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[];const ET={};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const th=u=>(u||'').replace('w_1200','w_480').replace('h_640','h_256');
@@ -65,15 +66,16 @@ async function load(){
  const a=await db.from('hf_recettes').select('id,nom,image,ingredients,favori,deja_fait').order('nom');
  const b=await db.from('hf_paniers').select('*').order('id');
  if(a.error||b.error){$('#list').innerHTML=`<div class="e">Erreur Supabase : ${esc((a.error||b.error).message)}</div>`;return}
- R=a.data;P=b.data;render()}
+ R=a.data;P=b.data;const c=await db.from('hf_stock').select('*').order('nom');ST=c.data||[];render()}
 
 function render(){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==S.tab));
- const q=$('#q');q.placeholder={rec:S.mode=='nom'?'Rechercher une recette…':'Ingrédients (ex : poulet, riz)',pan:'N° de panier ou recette',cou:'Filtrer un ingrédient'}[S.tab];
+ const q=$('#q');q.placeholder={rec:S.mode=='nom'?'Rechercher une recette…':'Ingrédients (ex : poulet, riz)',pan:'N° de panier ou recette',cou:'Filtrer un ingrédient',sto:'Rechercher dans le stock'}[S.tab];
  const bt=(a,v,t,on)=>`<button data-a="${a}" data-v="${v}" class="${on?'on':''}">${t}</button>`;
  $('#bar').innerHTML=S.tab=='rec'?bt('mode','nom','Nom',S.mode=='nom')+bt('mode','ing','Ingrédient',S.mode=='ing')+bt('lien','','＋ Lien',false)+' | '+
   [['all','Toutes'],['fav','★ Favoris'],['afaire','À faire'],['fait','✓ Faites']].map(([v,t])=>bt('f',v,t,S.f==v)).join(''):'';
  $('#bar').innerHTML+=`<span style="white-space:nowrap;margin-left:auto">👥 Pour <select id="pers" style="font-size:16px;padding:4px">${[1,2,3,4,5,6,8].map(n=>`<option ${n==S.pers?'selected':''}>${n}</option>`).join('')}</select></span>`;
+ if(S.tab=='cou')$('#bar').innerHTML=bt('cf','all','Tout',S.cf!='buy')+bt('cf','buy','À acheter',S.cf=='buy')+$('#bar').innerHTML;
  list()}
 
 function list(){const L=$('#list');
@@ -88,17 +90,34 @@ function list(){const L=$('#list');
    <label>Panier n° <input data-f="numero" inputmode="numeric" value="${esc(p.numero)}"></label>
    <label>Pers. <input data-f="pers" type="number" step="1" min="1" value="${Math.round(p.coef*200)/100}"></label><button data-a="del">✕ Retirer</button></div>`).join(''):
    '<div class="i">Aucun panier. Ajoute des recettes avec « ＋ Panier ».</div>'}
+ else if(S.tab=='sto'){const t=norm(S.q);
+  const noms=[...new Set(R.flatMap(r=>r.ingredients.map(i=>i.n)))].sort();
+  const us=['g','kg','ml','cl','l','cs','cc','pièce(s)','sachet(s)','pot(s)','paquet(s)','boîte(s)'];
+  const items=ST.filter(z=>!t||norm(z.nom).includes(t));
+  L.innerHTML=`<datalist id="dl">${noms.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+  <div class="p"><input id="sn" list="dl" placeholder="Ingrédient (ex : Riz)" style="flex:1 1 100%;width:auto">
+  <input id="sq" type="number" step="any" inputmode="decimal" placeholder="Qté"><select id="su" style="font-size:16px;padding:8px">${us.map(u=>`<option>${u}</option>`).join('')}</select>
+  <button data-a="stadd">＋ Ajouter</button></div>`+(items.length?items.map(z=>`<div class="p" data-sid="${z.id}"><div class="t">${esc(z.nom)}</div>
+  <label><input data-s="1" type="number" step="any" inputmode="decimal" value="${z.quantite}"> ${esc(z.unite)}</label><button data-a="stdel">✕</button></div>`).join(''):'<div class="i">Stock vide</div>')}
  else{const t=norm(S.q),m={};
   P.forEach(p=>{const r=rec(p.recette_id);if(r)r.ingredients.forEach((i,ix)=>{const k=norm(i.n);if(!k||(t&&!k.includes(t)))return;
    (m[k]??={nom:i.n,l:[]}).l.push({p,r,i,ix,d:p.coches.includes(ix)})})});
-  const g=Object.entries(m).map(([k,v])=>({k,...v,d:v.l.every(x=>x.d)})).sort((a,b)=>a.d-b.d||a.k.localeCompare(b.k));
+  const g=Object.entries(m).map(([k,v])=>({k,...v,d:v.l.every(x=>x.d)})).filter(x=>S.cf!='buy'||!etat(x).ok).sort((a,b)=>a.d-b.d||a.k.localeCompare(b.k));
   L.innerHTML=g.length?g.map(x=>{const u={};x.l.forEach(y=>{const c=y.i.u;u[c]=(u[c]||0)+(y.i.q==null?0:y.i.q*y.p.coef)});
    const tot=Object.entries(u).map(([c,v])=>v?`${fq(v)} ${esc(c)}`:esc(c)||'—').join(' + ');
-   return`<details data-k="${esc(x.k)}" class="${x.d?'done':''}" ${S.o[x.k]?'open':''}><summary>${esc(x.nom)} — ${tot}</summary>
+   return`<details data-k="${esc(x.k)}" class="${x.d?'done':''}" ${S.o[x.k]?'open':''}><summary>${esc(x.nom)} — ${tot}${stk(x)}</summary>
    ${x.l.map(y=>`<label class="${y.d?'s':''}"><input type="checkbox" data-a="chk" data-pid="${y.p.id}" data-ix="${y.ix}" ${y.d?'checked':''}>
    <b>Panier ${esc(y.p.numero||'?')}</b> · ${esc(y.r.nom)} — ${ing(y.i,y.p.coef)}</label>`).join('')}</details>`}).join(''):
    '<div class="i">Liste vide : ajoute des recettes aux paniers.</div>'}}
 
+function etat(x){const u={};x.l.forEach(y=>{u[y.i.u]=(u[y.i.u]||0)+(y.i.q==null?0:y.i.q*y.p.coef)});
+ const sk=ST.filter(z=>norm(z.nom)==x.k);
+ const r=Object.entries(u).map(([c,v])=>{const h=sk.filter(z=>z.unite==c).reduce((a,z)=>a+z.quantite,0);return{c,v,rest:Math.max(0,v-h)}});
+ return{sk,r,ok:sk.length>0&&r.every(z=>z.v==0||z.rest==0)}}
+function stk(x){const e=etat(x);if(!e.sk.length)return'';
+ const have=e.sk.map(z=>`${fq(z.quantite)} ${esc(z.unite)}`).join(' + ');
+ const buy=e.r.filter(z=>z.rest>0).map(z=>`${fq(z.rest)} ${esc(z.c)}`).join(' + ');
+ return` · 🏠 ${have}`+(e.ok?' ✓':buy?` → à acheter : ${buy}`:'')}
 function card(r){const n=P.filter(p=>p.recette_id==r.id);
  return`<div class="c" data-id="${r.id}"><img loading="lazy" data-a="open" src="${esc(th(r.image))}" data-o="${esc(r.image)}" onerror="this.onerror=null;this.src=this.dataset.o">
  <div class="t" data-a="open">${esc(r.nom)}</div><div class="b"><button data-a="fav">${r.favori?'★':'☆'}</button><button data-a="add">＋ Panier</button>
@@ -128,6 +147,15 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='close'){$('#m').hidden=true;S.m=null}
  else if(a=='fav'||a=='fait'){await flag(id,a=='fav'?'favori':'deja_fait');if(S.m)paint();list()}
  else if(a=='add')add(id);
+ else if(a=='cf'){S.cf=b.dataset.v;render()}
+ else if(a=='stdel'){const sid=+b.closest('[data-sid]').dataset.sid;const x=await db.from('hf_stock').delete().eq('id',sid);
+  if(x.error)return alert(x.error.message);ST=ST.filter(z=>z.id!=sid);list()}
+ else if(a=='stadd'){const nom=$('#sn').value.trim(),q=parseFloat($('#sq').value),u=$('#su').value;
+  if(!nom||!(q>=0))return alert('Ingrédient et quantité requis');
+  const ex=ST.find(z=>norm(z.nom)==norm(nom)&&z.unite==u);
+  if(ex){ex.quantite+=q;const x=await db.from('hf_stock').update({quantite:ex.quantite}).eq('id',ex.id);if(x.error)alert(x.error.message)}
+  else{const x=await db.from('hf_stock').insert({nom,quantite:q,unite:u}).select().single();if(x.error)return alert(x.error.message);ST.push(x.data)}
+  list()}
  else if(a=='lien'){const u=prompt('Colle le lien de la recette HelloFresh :');if(!u)return;
   b.disabled=true;b.textContent='…';
   const x=await db.functions.invoke('ajouter-recette',{body:{url:u.trim()}});
@@ -140,6 +168,8 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
   const x=await db.from('hf_paniers').update({coches:p.coches}).eq('id',p.id);if(x.error)alert(x.error.message);list()}});
 document.addEventListener('change',async e=>{
  if(e.target.id=='pers'){S.pers=+e.target.value;try{localStorage.setItem('hfp',S.pers)}catch(_){}if(S.m)paint();return}
+ if(e.target.dataset.s){const sid=+e.target.closest('[data-sid]').dataset.sid;const z=ST.find(z=>z.id==sid);
+  z.quantite=parseFloat(e.target.value)||0;const x=await db.from('hf_stock').update({quantite:z.quantite}).eq('id',sid);if(x.error)alert(x.error.message);return}
  const f=e.target.dataset.f;if(!f)return;const pid=+e.target.closest('[data-pid]').dataset.pid;
  const p=P.find(p=>p.id==pid);const g=f=='pers'?'coef':f;
  const v=f=='pers'?(parseFloat(e.target.value)||2)/2:e.target.value.trim();
