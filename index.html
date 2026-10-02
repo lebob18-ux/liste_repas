@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
- <link rel="manifest" href="manifest.json">
+<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#ff6b6b">
 <title>Recettes HelloFresh</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -43,7 +43,7 @@ details label input{margin-right:8px;transform:scale(1.4)}
 <nav><button data-a="tab" data-v="rec">Recettes</button><button data-a="tab" data-v="pan">Paniers</button><button data-a="tab" data-v="cou">Courses</button></nav>
 <div id="m" hidden><button class="x" data-a="close">✕ Fermer</button><div id="mc"></div></div>
 <script>
-const SUPABASE_URL="https://thbqkeugjvsxbryfnzuo.supabase.co", SUPABASE_KEY="sb_publishable_2-Ij-nrTPeK6rB-kSD-QTg_b42zNakq";
+const SUPABASE_URL="https://XXXX.supabase.co", SUPABASE_KEY="TA_CLE_ANON";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=s=>document.querySelector(s);
 const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[];const ET={};
@@ -71,7 +71,7 @@ function render(){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==S.tab));
  const q=$('#q');q.placeholder={rec:S.mode=='nom'?'Rechercher une recette…':'Ingrédients (ex : poulet, riz)',pan:'N° de panier ou recette',cou:'Filtrer un ingrédient'}[S.tab];
  const bt=(a,v,t,on)=>`<button data-a="${a}" data-v="${v}" class="${on?'on':''}">${t}</button>`;
- $('#bar').innerHTML=S.tab=='rec'?bt('mode','nom','Nom',S.mode=='nom')+bt('mode','ing','Ingrédient',S.mode=='ing')+' | '+
+ $('#bar').innerHTML=S.tab=='rec'?bt('mode','nom','Nom',S.mode=='nom')+bt('mode','ing','Ingrédient',S.mode=='ing')+bt('lien','','＋ Lien',false)+' | '+
   [['all','Toutes'],['fav','★ Favoris'],['afaire','À faire'],['fait','✓ Faites']].map(([v,t])=>bt('f',v,t,S.f==v)).join(''):'';
  $('#bar').innerHTML+=`<span style="white-space:nowrap;margin-left:auto">👥 Pour <select id="pers" style="font-size:16px;padding:4px">${[1,2,3,4,5,6,8].map(n=>`<option ${n==S.pers?'selected':''}>${n}</option>`).join('')}</select></span>`;
  list()}
@@ -128,6 +128,11 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='close'){$('#m').hidden=true;S.m=null}
  else if(a=='fav'||a=='fait'){await flag(id,a=='fav'?'favori':'deja_fait');if(S.m)paint();list()}
  else if(a=='add')add(id);
+ else if(a=='lien'){const u=prompt('Colle le lien de la recette HelloFresh :');if(!u)return;
+  b.disabled=true;b.textContent='…';
+  const x=await db.functions.invoke('ajouter-recette',{body:{url:u.trim()}});
+  b.disabled=false;b.textContent='＋ Lien';const d=x.data;
+  alert(x.error?x.error.message:d?.erreur?d.erreur:'Ajoutée : '+d.nom);if(d?.nom)await load()}
  else if(a=='del'){const pid=+b.closest('[data-pid]').dataset.pid;if(!confirm('Retirer ce panier ?'))return;
   const x=await db.from('hf_paniers').delete().eq('id',pid);if(x.error)return alert(x.error.message);P=P.filter(p=>p.id!=pid);list()}
  else if(a=='chk'){const p=P.find(p=>p.id==b.dataset.pid),ix=+b.dataset.ix;
