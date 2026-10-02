@@ -5,6 +5,7 @@
 <meta name="theme-color" content="#ff6b6b">
 <title>Recettes HelloFresh</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;font:16px system-ui,sans-serif;background:#f4f4f1;color:#222;padding:118px 0 70px}
 header{position:fixed;top:0;left:0;right:0;background:#fff;padding:8px;box-shadow:0 1px 4px #0003;z-index:5}
@@ -43,8 +44,6 @@ details label input{margin-right:8px;transform:scale(1.4)}
 <nav><button data-a="tab" data-v="rec">Recettes</button><button data-a="tab" data-v="pan">Paniers</button><button data-a="tab" data-v="cou">Courses</button><button data-a="tab" data-v="sto">Stock</button></nav>
 <div id="m" hidden><button class="x" data-a="close">✕ Fermer</button><div id="mc"></div></div>
 <script>
-        const SUPABASE_URL = "https://thbqkeugjvsxbryfnzuo.supabase.co";
-        const SUPABASE_KEY = "sb_publishable_2-Ij-nrTPeK6rB-kSD-QTg_b42zNakq";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=s=>document.querySelector(s);
 const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[];const ET={};
@@ -91,14 +90,14 @@ function list(){const L=$('#list');
    <label>Pers. <input data-f="pers" type="number" step="1" min="1" value="${Math.round(p.coef*200)/100}"></label><button data-a="del">✕ Retirer</button></div>`).join(''):
    '<div class="i">Aucun panier. Ajoute des recettes avec « ＋ Panier ».</div>'}
  else if(S.tab=='sto'){const t=norm(S.q);
-  const noms=[...new Set(R.flatMap(r=>r.ingredients.map(i=>i.n)))].sort();
+  
   const us=['g','kg','ml','cl','l','cs','cc','pièce(s)','sachet(s)','pot(s)','paquet(s)','boîte(s)'];
   const items=ST.filter(z=>!t||norm(z.nom).includes(t));
-  L.innerHTML=`<datalist id="dl">${noms.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
-  <div class="p"><input id="sn" list="dl" placeholder="Ingrédient (ex : Riz)" style="flex:1 1 100%;width:auto">
+  L.innerHTML=`
+  <div class="p"><input id="sn" oninput="sug()" autocomplete="off" placeholder="Ingrédient (ex : Riz)" style="flex:1 1 100%;width:auto">
   <input id="sq" type="number" step="any" inputmode="decimal" placeholder="Qté"><select id="su" style="font-size:16px;padding:8px">${us.map(u=>`<option>${u}</option>`).join('')}</select>
-  <button data-a="stadd">＋ Ajouter</button></div>`+(items.length?items.map(z=>`<div class="p" data-sid="${z.id}"><div class="t">${esc(z.nom)}</div>
-  <label><input data-s="1" type="number" step="any" inputmode="decimal" value="${z.quantite}"> ${esc(z.unite)}</label><button data-a="stdel">✕</button></div>`).join(''):'<div class="i">Stock vide</div>')}
+  <button data-a="stadd">＋ Ajouter</button></div><div class="i" style="padding:2px 0;text-align:left">Ingrédients de tes recettes — touche pour choisir :</div><div id="sg" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 12px"></div>`+(items.length?items.map(z=>`<div class="p" data-sid="${z.id}"><div class="t">${esc(z.nom)}</div>
+  <label><input data-s="1" type="number" step="any" inputmode="decimal" value="${z.quantite}"> ${esc(z.unite)}</label><button data-a="stdel">✕</button></div>`).join(''):'<div class="i">Stock vide</div>');sug()}
  else{const t=norm(S.q),m={};
   P.forEach(p=>{const r=rec(p.recette_id);if(r)r.ingredients.forEach((i,ix)=>{const k=norm(i.n);if(!k||(t&&!k.includes(t)))return;
    (m[k]??={nom:i.n,l:[]}).l.push({p,r,i,ix,d:p.coches.includes(ix)})})});
@@ -110,6 +109,13 @@ function list(){const L=$('#list');
    <b>Panier ${esc(y.p.numero||'?')}</b> · ${esc(y.r.nom)} — ${ing(y.i,y.p.coef)}</label>`).join('')}</details>`}).join(''):
    '<div class="i">Liste vide : ajoute des recettes aux paniers.</div>'}}
 
+let _ig=null;
+function ig(){if(_ig&&_ig.n==R.length)return _ig;const m={};
+ R.forEach(r=>r.ingredients.forEach(i=>{if(!i.n)return;const k=norm(i.n);const e=m[k]??={nom:i.n,c:0,u:{}};e.c++;e.u[i.u]=(e.u[i.u]||0)+1}));
+ _ig={n:R.length,l:Object.values(m).sort((a,b)=>b.c-a.c)};return _ig}
+function sug(){const el=$('#sg');if(!el)return;const t=norm($('#sn')?.value);const have=new Set(ST.map(z=>norm(z.nom)));
+ const l=ig().l.filter(e=>!have.has(norm(e.nom))&&(!t||norm(e.nom).includes(t))).slice(0,60);
+ el.innerHTML=l.length?l.map(e=>`<button data-a="pick" data-n="${esc(e.nom)}">${esc(e.nom)}</button>`).join(''):'<span class="i">Aucune suggestion</span>'}
 function etat(x){const u={};x.l.forEach(y=>{u[y.i.u]=(u[y.i.u]||0)+(y.i.q==null?0:y.i.q*y.p.coef)});
  const sk=ST.filter(z=>norm(z.nom)==x.k);
  const r=Object.entries(u).map(([c,v])=>{const h=sk.filter(z=>z.unite==c).reduce((a,z)=>a+z.quantite,0);return{c,v,rest:Math.max(0,v-h)}});
@@ -147,6 +153,10 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='close'){$('#m').hidden=true;S.m=null}
  else if(a=='fav'||a=='fait'){await flag(id,a=='fav'?'favori':'deja_fait');if(S.m)paint();list()}
  else if(a=='add')add(id);
+ else if(a=='pick'){const nom=b.dataset.n,e=ig().l.find(z=>z.nom==nom),su=$('#su');
+  const u=e?Object.entries(e.u).sort((x,y)=>y[1]-x[1])[0][0]:'';
+  $('#sn').value=nom;if(u){if(![...su.options].some(o=>o.text==u))su.add(new Option(u));su.value=u}
+  $('#sq').focus();sug()}
  else if(a=='cf'){S.cf=b.dataset.v;render()}
  else if(a=='stdel'){const sid=+b.closest('[data-sid]').dataset.sid;const x=await db.from('hf_stock').delete().eq('id',sid);
   if(x.error)return alert(x.error.message);ST=ST.filter(z=>z.id!=sid);list()}
