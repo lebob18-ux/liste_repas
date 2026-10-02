@@ -1,231 +1,143 @@
 <!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mes Recettes IA</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#ff6b6b">
-    <!-- Tailwind CSS pour un design propre et rapide -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SDK Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
-<body class="bg-gray-50 text-gray-800 pb-12">
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recettes HelloFresh</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px system-ui,sans-serif;background:#f4f4f1;color:#222;padding:118px 0 70px}
+header{position:fixed;top:0;left:0;right:0;background:#fff;padding:8px;box-shadow:0 1px 4px #0003;z-index:5}
+#q{width:100%;padding:11px;font-size:16px;border:1px solid #bbb;border-radius:8px}
+#bar{display:flex;gap:6px;overflow-x:auto;padding-top:6px}
+#bar button{white-space:nowrap}
+button{border:1px solid #bbb;background:#fff;border-radius:16px;padding:7px 12px;font-size:14px}
+button.on{background:#2e7d32;color:#fff;border-color:#2e7d32}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#fff;box-shadow:0 -1px 4px #0003;z-index:5}
+nav button{flex:1;border:0;border-radius:0;padding:16px 4px;background:#fff}
+nav button.on{background:#2e7d32}
+#list{padding:8px}
+.g{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:700px){.g{grid-template-columns:repeat(4,1fr)}}
+.c{background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px #0002}
+.c img{width:100%;aspect-ratio:1200/640;object-fit:cover;display:block;background:#ddd}
+.t{padding:6px 8px;font-weight:600;font-size:14px;cursor:pointer}
+.c .t{height:56px;overflow:hidden}
+.b{padding:0 6px 8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px}
+.b button{padding:5px 9px}
+.p,details{background:#fff;border-radius:10px;padding:10px;margin-bottom:8px;box-shadow:0 1px 3px #0002}
+.p{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.p .t{flex:1 1 100%}
+.p input{width:80px;padding:8px;font-size:16px;border:1px solid #bbb;border-radius:6px}
+summary{font-weight:600;cursor:pointer}details.done{opacity:.5}
+details label{display:block;padding:9px 0;border-top:1px solid #eee}
+details label input{margin-right:8px;transform:scale(1.4)}
+.s{opacity:.55;text-decoration:line-through}
+#m{position:fixed;inset:0;background:#fff;overflow:auto;z-index:10;padding:0 0 30px}
+#m[hidden]{display:none}#m img{width:100%;display:block}#mc{padding:12px}
+#m h4{margin:14px 0 2px}#m li{margin:4px 0}
+.x{position:sticky;top:0;float:right;margin:8px;background:#fff}
+.e{color:#b00;padding:12px}.i{color:#777;padding:14px;text-align:center}
+</style></head><body>
+<header><input id="q" placeholder="Rechercher…" autocomplete="off"><div id="bar"></div></header>
+<main id="list"></main>
+<nav><button data-a="tab" data-v="rec">Recettes</button><button data-a="tab" data-v="pan">Paniers</button><button data-a="tab" data-v="cou">Courses</button></nav>
+<div id="m" hidden><button class="x" data-a="close">✕ Fermer</button><div id="mc"></div></div>
+<script>
+const SUPABASE_URL="https://XXXX.supabase.co", SUPABASE_KEY="TA_CLE_ANON";
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const $=s=>document.querySelector(s);
+const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[];const ET={};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+const th=u=>(u||'').replace('w_1200','w_480').replace('h_640','h_256');
+const rec=id=>R.find(r=>r.id==id);
+const FR=[[.125,'⅛'],[.25,'¼'],[1/3,'⅓'],[.5,'½'],[2/3,'⅔'],[.75,'¾']];
+function fq(q){if(q==null)return'';const e=Math.floor(q+1e-6),f=q-e;if(f<.06)return''+e;
+ for(const[v,s]of FR)if(Math.abs(f-v)<.04)return(e?e+' ':'')+s;return(Math.round(q*100)/100+'').replace('.',',')}
+const ing=(i,c=1)=>i.q==null?`${esc(i.u)} ${esc(i.n)}`:`${fq(i.q*c)} ${esc(i.u)} ${esc(i.n)}`;
+const ok=['UL','OL','LI','P','STRONG','EM','B','I','BR'];
+function clean(h){const d=new DOMParser().parseFromString(h,'text/html');
+ (function w(n){[...n.children].forEach(c=>{w(c);if(/^(SCRIPT|STYLE|IFRAME|OBJECT)$/.test(c.tagName))c.remove();
+ else{[...c.attributes].forEach(a=>c.removeAttribute(a.name));if(!ok.includes(c.tagName))c.replaceWith(...c.childNodes)}})})(d.body);
+ return d.body.innerHTML}
 
-    <!-- Header -->
-    <header class="bg-red-500 text-white p-4 shadow-md flex justify-between items-center">
-        <h1 class="text-xl font-bold">🍳 Mes Recettes Magiques</h1>
-    </header>
+async function load(){
+ const a=await db.from('hf_recettes').select('id,nom,image,ingredients,favori,deja_fait').order('nom');
+ const b=await db.from('hf_paniers').select('*').order('id');
+ if(a.error||b.error){$('#list').innerHTML=`<div class="e">Erreur Supabase : ${esc((a.error||b.error).message)}</div>`;return}
+ R=a.data;P=b.data;render()}
 
-    <!-- Contenu Principal -->
-    <main class="max-w-md mx-auto p-4 space-y-6">
+function render(){
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==S.tab));
+ const q=$('#q');q.placeholder={rec:S.mode=='nom'?'Rechercher une recette…':'Ingrédients (ex : poulet, riz)',pan:'N° de panier ou recette',cou:'Filtrer un ingrédient'}[S.tab];
+ const bt=(a,v,t,on)=>`<button data-a="${a}" data-v="${v}" class="${on?'on':''}">${t}</button>`;
+ $('#bar').innerHTML=S.tab=='rec'?bt('mode','nom','Nom',S.mode=='nom')+bt('mode','ing','Ingrédient',S.mode=='ing')+' | '+
+  [['all','Toutes'],['fav','★ Favoris'],['afaire','À faire'],['fait','✓ Faites']].map(([v,t])=>bt('f',v,t,S.f==v)).join(''):'';
+ $('#bar').innerHTML+=`<span style="white-space:nowrap;margin-left:auto">👥 Pour <select id="pers" style="font-size:16px;padding:4px">${[1,2,3,4,5,6,8].map(n=>`<option ${n==S.pers?'selected':''}>${n}</option>`).join('')}</select></span>`;
+ list()}
 
-        <!-- Formulaire de capture -->
-        <div class="bg-white p-4 rounded-xl shadow-md space-y-4">
-            <h2 class="font-bold text-lg text-gray-700">Ajouter une recette</h2>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-600 mb-1">Prendre en photo la recette :</label>
-                <input type="file" id="recipe-photo" accept="image/*" capture="environment" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"/>
-            </div>
+function list(){const L=$('#list');
+ if(S.tab=='rec'){const terms=norm(S.q).split(',').map(x=>x.trim()).filter(Boolean);
+  const r=R.filter(r=>(S.f!='fav'||r.favori)&&(S.f!='fait'||r.deja_fait)&&(S.f!='afaire'||!r.deja_fait)&&
+   terms.every(t=>S.mode=='nom'?norm(r.nom).includes(t):r.ingredients.some(i=>norm(i.n).includes(t))));
+  L.innerHTML=r.length?`<div class="g">${r.map(card).join('')}</div>`:'<div class="i">Aucune recette</div>'}
+ else if(S.tab=='pan'){const t=norm(S.q);
+  const r=P.filter(p=>rec(p.recette_id)&&(!t||norm(p.numero).includes(t)||norm(rec(p.recette_id).nom).includes(t)))
+   .sort((a,b)=>(parseFloat(a.numero)||1e9)-(parseFloat(b.numero)||1e9)||a.id-b.id);
+  L.innerHTML=r.length?r.map(p=>`<div class="p" data-pid="${p.id}"><div class="t" data-a="open" data-id="${p.recette_id}">${esc(rec(p.recette_id).nom)}</div>
+   <label>Panier n° <input data-f="numero" inputmode="numeric" value="${esc(p.numero)}"></label>
+   <label>Pers. <input data-f="pers" type="number" step="1" min="1" value="${Math.round(p.coef*200)/100}"></label><button data-a="del">✕ Retirer</button></div>`).join(''):
+   '<div class="i">Aucun panier. Ajoute des recettes avec « ＋ Panier ».</div>'}
+ else{const t=norm(S.q),m={};
+  P.forEach(p=>{const r=rec(p.recette_id);if(r)r.ingredients.forEach((i,ix)=>{const k=norm(i.n);if(!k||(t&&!k.includes(t)))return;
+   (m[k]??={nom:i.n,l:[]}).l.push({p,r,i,ix,d:p.coches.includes(ix)})})});
+  const g=Object.entries(m).map(([k,v])=>({k,...v,d:v.l.every(x=>x.d)})).sort((a,b)=>a.d-b.d||a.k.localeCompare(b.k));
+  L.innerHTML=g.length?g.map(x=>{const u={};x.l.forEach(y=>{const c=y.i.u;u[c]=(u[c]||0)+(y.i.q==null?0:y.i.q*y.p.coef)});
+   const tot=Object.entries(u).map(([c,v])=>v?`${fq(v)} ${esc(c)}`:esc(c)||'—').join(' + ');
+   return`<details data-k="${esc(x.k)}" class="${x.d?'done':''}" ${S.o[x.k]?'open':''}><summary>${esc(x.nom)} — ${tot}</summary>
+   ${x.l.map(y=>`<label class="${y.d?'s':''}"><input type="checkbox" data-a="chk" data-pid="${y.p.id}" data-ix="${y.ix}" ${y.d?'checked':''}>
+   <b>Panier ${esc(y.p.numero||'?')}</b> · ${esc(y.r.nom)} — ${ing(y.i,y.p.coef)}</label>`).join('')}</details>`}).join(''):
+   '<div class="i">Liste vide : ajoute des recettes aux paniers.</div>'}}
 
-            <div id="preview-container" class="hidden text-center">
-                <p class="text-xs text-gray-400 mb-1">Aperçu compressé :</p>
-                <img id="image-preview" class="max-h-40 mx-auto rounded shadow" alt="Aperçu">
-            </div>
+function card(r){const n=P.filter(p=>p.recette_id==r.id);
+ return`<div class="c" data-id="${r.id}"><img loading="lazy" data-a="open" src="${esc(th(r.image))}" data-o="${esc(r.image)}" onerror="this.onerror=null;this.src=this.dataset.o">
+ <div class="t" data-a="open">${esc(r.nom)}</div><div class="b"><button data-a="fav">${r.favori?'★':'☆'}</button><button data-a="add">＋ Panier</button>
+ ${n.length?'🧺 '+n.map(p=>esc(p.numero||'?')).join(', '):''}${r.deja_fait?' ✓':''}</div></div>`}
 
-            <button onclick="processAndSaveRecipe()" id="btn-submit" class="w-full bg-red-500 text-white py-3 rounded-lg font-bold shadow hover:bg-red-600 disabled:opacity-50">
-                ✨ Analyser avec l'IA & Enregistrer
-            </button>
-            <p id="status-msg" class="text-xs text-center text-gray-500"></p>
-        </div>
+async function openR(id){S.m=id;$('#m').hidden=false;paint();
+ if(!ET[id]){const x=await db.from('hf_recettes').select('etapes').eq('id',id).single();ET[id]=x.data?.etapes||[];if(S.m==id)paint()}}
+function paint(){const r=rec(S.m);if(!r)return;const id=r.id,e=ET[id];
+ $('#mc').scrollTop=0;
+ $('#mc').innerHTML=`<img src="${esc(r.image)}"><h2>${esc(r.nom)}</h2><div class="b" data-id="${id}">
+ <button data-a="fav">${r.favori?'★ Favori':'☆ Favori'}</button><button data-a="fait">${r.deja_fait?'✓ Déjà faite':'Marquer faite'}</button><button data-a="add">＋ Panier</button></div>
+ <h4>Ingrédients (${S.pers} pers.)</h4><ul>${r.ingredients.map(i=>`<li>${ing(i,S.pers/2)}</li>`).join('')}</ul><h4>Préparation</h4>
+ ${e?e.map((h,k)=>`<h4>Étape ${k+1}</h4>${clean(h)}`).join(''):'<div class="i">Chargement…</div>'}
+ <p><a href="${esc(rec(id).url||'#')}" target="_blank" rel="noopener">Page HelloFresh</a></p>`}
 
-        <!-- Liste des recettes -->
-        <div class="space-y-4">
-            <h2 class="font-bold text-lg text-gray-700">Mes Recettes Enregistrées</h2>
-            <div id="recipes-list" class="space-y-3">
-                <!-- Rempli dynamiquement -->
-            </div>
-        </div>
+async function flag(id,f){const r=rec(id);r[f]=!r[f];const x=await db.from('hf_recettes').update({[f]:r[f]}).eq('id',id);
+ if(x.error){r[f]=!r[f];alert(x.error.message)}}
+async function add(id){const x=await db.from('hf_paniers').insert({recette_id:id,coef:S.pers/2}).select().single();
+ if(x.error)return alert(x.error.message);P.push(x.data);S.tab='pan';S.q='';$('#q').value='';$('#m').hidden=true;S.m=null;render()}
 
-    </main>
-
-    <!-- Script Logique & Configuration en dur -->
-    <script>
-        // CONFIGURATION
-        // ==========================================
-        const SUPABASE_URL = "https://thbqkeugjvsxbryfnzuo.supabase.co";
-        const SUPABASE_ANON_KEY = "sb_publishable_2-Ij-nrTPeK6rB-kSD-QTg_b42zNakq";
-        const GEMINI_API_KEY = "AQ.Ab8RN6IvsGKP4haGmYZpyKYUsOwF9fFKbQVfK-qCdn_5rcbw6A";
-        // ==========================================
-        // Initialisation de Supabase
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        // Charger les recettes au démarrage
-        window.addEventListener('DOMContentLoaded', () => {
-            loadRecipes();
-        });
-
-        // Compression d'image et affichage de l'aperçu
-        const photoInput = document.getElementById('recipe-photo');
-        let compressedBlob = null;
-
-        photoInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            document.getElementById('status-msg').innerText = "Compression de l'image...";
-            compressedBlob = await compressImage(file, 800, 0.7);
-            
-            const previewUrl = URL.createObjectURL(compressedBlob);
-            document.getElementById('image-preview').src = previewUrl;
-            document.getElementById('preview-container').classList.remove('hidden');
-            document.getElementById('status-msg').innerText = "Image prête à être analysée.";
-        });
-
-        function compressImage(file, maxWidth = 800, quality = 0.7) {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.src = event.target.result;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-                        if (width > maxWidth) {
-                            height = Math.round((height * maxWidth) / width);
-                            width = maxWidth;
-                        }
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-                        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality);
-                    };
-                };
-            });
-        }
-
-        // Fonction principale : Upload Storage + Appel Gemini API + Insert Supabase
-async function processAndSaveRecipe() {
-    if (!compressedBlob) {
-        alert("Veuillez sélectionner ou prendre une photo de recette.");
-        return;
-    }
-
-    const btn = document.getElementById('btn-submit');
-    const status = document.getElementById('status-msg');
-    btn.disabled = true;
-
-    try {
-        // 1. Upload de l'image compressée vers Supabase Storage
-        status.innerText = "1/3 Upload de l'image...";
-        const fileName = `recipe_${Date.now()}.jpg`;
-        const { data: uploadData, error: uploadError } = await supabaseClient.storage
-            .from('recipes-images')
-            .upload(fileName, compressedBlob, { contentType: 'image/jpeg' });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabaseClient.storage
-            .from('recipes-images')
-            .getPublicUrl(fileName);
-        const imageUrl = publicUrlData.publicUrl;
-
-        // 2. Conversion du Blob en Base64 pour l'API Gemini
-        status.innerText = "2/3 Analyse de la recette par l'IA...";
-        const base64Data = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result.split(',')[1]);
-            reader.readAsDataURL(compressedBlob);
-        });
-
-// Appel Gemini mis à jour
-        const geminiResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: "Analyse cette image de recette. Extrais les informations au format JSON strict avec EXACTEMENT ces clés : {\"title\": \"Titre de la recette\", \"ingredients\": \"Liste des ingrédients au format texte ou markdown\", \"instructions\": \"Étapes de préparation\"}" },
-                        { inline_data: { mime_type: "image/jpeg", data: base64Data } }
-                    ]
-                }]
-            })
-        });
-
-        const geminiJson = await geminiResp.json();
-        
-        // Sécurité renforcée pour éviter le "cannot read properties of undefined"
-        if (!geminiJson.candidates || !geminiJson.candidates[0]?.content?.parts?.[0]?.text) {
-            console.error("Réponse brute Gemini :", geminiJson);
-            throw new Error("L'IA n'a pas renvoyé de contenu valide. Vérifie ta clé API.");
-        }
-
-        let rawText = geminiJson.candidates[0].content.parts[0].text;
-        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const recipeData = JSON.parse(rawText);
-
-        // 3. Enregistrement dans la table Supabase `recipes`
-        status.innerText = "3/3 Enregistrement dans la base...";
-        const { error: dbError } = await supabaseClient.from('recipes').insert([{
-            title: recipeData.title || "Recette sans titre",
-            ingredients: recipeData.ingredients || "",
-            instructions: recipeData.instructions || "",
-            image_url: imageUrl
-        }]);
-
-        if (dbError) throw dbError;
-
-        status.innerText = "✅ Recette enregistrée avec succès !";
-        photoInput.value = "";
-        document.getElementById('preview-container').classList.add('hidden');
-        compressedBlob = null;
-        loadRecipes();
-
-    } catch (err) {
-        console.error(err);
-        status.innerText = "❌ Erreur : " + err.message;
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-        // Charger et afficher les recettes depuis Supabase
-        async function loadRecipes() {
-            const { data, error } = await supabaseClient
-                .from('recipes')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (error) {
-                console.error("Erreur chargement:", error);
-                return;
-            }
-
-            const listEl = document.getElementById('recipes-list');
-            listEl.innerHTML = '';
-
-            if (data.length === 0) {
-                listEl.innerHTML = '<p class="text-sm text-gray-400 italic text-center">Aucune recette pour le moment.</p>';
-                return;
-            }
-
-            data.forEach(recipe => {
-                listEl.innerHTML += `
-                    <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex gap-3 items-center">
-                        <img src="${recipe.image_url || 'https://via.placeholder.com/80'}" class="w-16 h-16 object-cover rounded-lg flex-shrink-0" alt="Miniature">
-                        <div class="overflow-hidden">
-                            <h3 class="font-bold text-sm text-gray-800 truncate">${recipe.title}</h3>
-                            <p class="text-xs text-gray-500 line-clamp-2">${recipe.ingredients}</p>
-                        </div>
-                    </div>
-                `;
-            });
-        }
-    </script>
-</body>
-</html>
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
+ const id=+(b.dataset.id||b.closest('[data-id]')?.dataset.id||0);
+ if(a=='tab'){S.tab=b.dataset.v;S.q='';$('#q').value='';render()}
+ else if(a=='mode'){S.mode=b.dataset.v;render()}
+ else if(a=='f'){S.f=b.dataset.v;render()}
+ else if(a=='open')openR(id);
+ else if(a=='close'){$('#m').hidden=true;S.m=null}
+ else if(a=='fav'||a=='fait'){await flag(id,a=='fav'?'favori':'deja_fait');if(S.m)paint();list()}
+ else if(a=='add')add(id);
+ else if(a=='del'){const pid=+b.closest('[data-pid]').dataset.pid;if(!confirm('Retirer ce panier ?'))return;
+  const x=await db.from('hf_paniers').delete().eq('id',pid);if(x.error)return alert(x.error.message);P=P.filter(p=>p.id!=pid);list()}
+ else if(a=='chk'){const p=P.find(p=>p.id==b.dataset.pid),ix=+b.dataset.ix;
+  p.coches=b.checked?[...new Set([...p.coches,ix])]:p.coches.filter(v=>v!=ix);
+  const x=await db.from('hf_paniers').update({coches:p.coches}).eq('id',p.id);if(x.error)alert(x.error.message);list()}});
+document.addEventListener('change',async e=>{
+ if(e.target.id=='pers'){S.pers=+e.target.value;try{localStorage.setItem('hfp',S.pers)}catch(_){}if(S.m)paint();return}
+ const f=e.target.dataset.f;if(!f)return;const pid=+e.target.closest('[data-pid]').dataset.pid;
+ const p=P.find(p=>p.id==pid);const g=f=='pers'?'coef':f;
+ const v=f=='pers'?(parseFloat(e.target.value)||2)/2:e.target.value.trim();
+ p[g]=v;const x=await db.from('hf_paniers').update({[g]:v}).eq('id',pid);if(x.error)alert(x.error.message)});
+document.addEventListener('toggle',e=>{if(e.target.dataset?.k)S.o[e.target.dataset.k]=e.target.open},true);
+$('#q').addEventListener('input',e=>{S.q=e.target.value;list()});
+load();
+</script></body></html>
