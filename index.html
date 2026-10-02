@@ -44,7 +44,15 @@ details label input{margin-right:8px;transform:scale(1.4)}
 <nav><button data-a="tab" data-v="rec">Recettes</button><button data-a="tab" data-v="pan">Paniers</button><button data-a="tab" data-v="cou">Courses</button><button data-a="tab" data-v="sto">Stock</button></nav>
 <div id="m" hidden><button class="x" data-a="close">✕ Fermer</button><div id="mc"></div></div>
 <script>
-const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let G='';try{G=localStorage.getItem('hfg')||''}catch(e){}
+let db;
+function demarrer(){
+ document.querySelector('nav').style.display=G?'':'none';
+ if(!G){$('#list').innerHTML=`<div class="p"><div class="t">Nom de ton groupe</div>
+  <div class="i" style="text-align:left">Choisis un nom difficile à deviner (ex : famille-dupont-2026). Tes parents saisissent le même nom pour partager les mêmes paniers, courses et stock.</div>
+  <input id="gn" style="flex:1 1 100%;width:auto" placeholder="nom-du-groupe" autocapitalize="none"><button data-a="gok">Valider</button></div>`;return}
+ db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{headers:{'x-groupe':G}}});
+ load()}
 const $=s=>document.querySelector(s);
 const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[];const ET={};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -73,7 +81,7 @@ function render(){
  const bt=(a,v,t,on)=>`<button data-a="${a}" data-v="${v}" class="${on?'on':''}">${t}</button>`;
  $('#bar').innerHTML=S.tab=='rec'?bt('mode','nom','Nom',S.mode=='nom')+bt('mode','ing','Ingrédient',S.mode=='ing')+bt('lien','','＋ Lien',false)+' | '+
   [['all','Toutes'],['fav','★ Favoris'],['afaire','À faire'],['fait','✓ Faites']].map(([v,t])=>bt('f',v,t,S.f==v)).join(''):'';
- $('#bar').innerHTML+=`<span style="white-space:nowrap;margin-left:auto">👥 Pour <select id="pers" style="font-size:16px;padding:4px">${[1,2,3,4,5,6,8].map(n=>`<option ${n==S.pers?'selected':''}>${n}</option>`).join('')}</select></span>`;
+ $('#bar').innerHTML+=`<span style="white-space:nowrap;margin-left:auto">👥 Pour <select id="pers" style="font-size:16px;padding:4px">${[1,2,3,4,5,6,8].map(n=>`<option ${n==S.pers?'selected':''}>${n}</option>`).join('')}</select><button data-a="grp" style="margin-left:6px">👪 ${esc(G)}</button></span>`;
  if(S.tab=='cou')$('#bar').innerHTML=bt('cf','all','Tout',S.cf!='buy')+bt('cf','buy','À acheter',S.cf=='buy')+$('#bar').innerHTML;
  list()}
 
@@ -157,6 +165,9 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
   const u=e?Object.entries(e.u).sort((x,y)=>y[1]-x[1])[0][0]:'';
   $('#sn').value=nom;if(u){if(![...su.options].some(o=>o.text==u))su.add(new Option(u));su.value=u}
   $('#sq').focus();sug()}
+ else if(a=='gok'){const g=norm($('#gn').value).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  if(!g)return alert('Nom invalide');G=g;try{localStorage.setItem('hfg',G)}catch(_){}demarrer()}
+ else if(a=='grp'){if(confirm('Changer de groupe ? Les données du groupe actuel restent enregistrées.')){try{localStorage.removeItem('hfg')}catch(_){}location.reload()}}
  else if(a=='cf'){S.cf=b.dataset.v;render()}
  else if(a=='stdel'){const sid=+b.closest('[data-sid]').dataset.sid;const x=await db.from('hf_stock').delete().eq('id',sid);
   if(x.error)return alert(x.error.message);ST=ST.filter(z=>z.id!=sid);list()}
@@ -186,5 +197,5 @@ document.addEventListener('change',async e=>{
  p[g]=v;const x=await db.from('hf_paniers').update({[g]:v}).eq('id',pid);if(x.error)alert(x.error.message)});
 document.addEventListener('toggle',e=>{if(e.target.dataset?.k)S.o[e.target.dataset.k]=e.target.open},true);
 $('#q').addEventListener('input',e=>{S.q=e.target.value;list()});
-load();
+demarrer();
 </script></body></html>
