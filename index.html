@@ -149,6 +149,7 @@ function chargerZX(){return window.ZXing?Promise.resolve():new Promise((ok,ko)=>
  e.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';e.onload=ok;e.onerror=ko;document.head.appendChild(e)})}
 const zxHints=()=>new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]],[ZXing.DecodeHintType.TRY_HARDER,true]]);
 function gtinOk(c){if(!/^(\d{8}|\d{12,14})$/.test(c))return false;const d=[...c].map(Number);return(10-d.slice(0,-1).reverse().reduce((s,x,i)=>s+x*(i%2?1:3),0)%10)%10==d[d.length-1]}
+function reparer(c){if(!/^\d{13}$/.test(c)||gtinOk(c))return c;for(let d=0;d<10;d++){const t=d+c.slice(1);if(gtinOk(t))return t}return c}
 const BD_FMT=['ean_13','ean_8','upc_a','upc_e'];
 const zxFmt=r=>{try{return ZXing.BarcodeFormat[r.getBarcodeFormat()]||''}catch(e){return''}};
 async function lirePhoto(file){
@@ -166,14 +167,14 @@ function scanner(){return new Promise(async res=>{
  let on=true,st=null,zr=null,prev='',pause=false;
  const fin=(c,f)=>{if(!on)return;on=false;SCF=f||'';if(st)st.getTracks().forEach(t=>t.stop());if(zr)try{zr.reset()}catch(e){}ov.remove();res(c)};
  const so=ov.querySelector('#so'),sr=ov.querySelector('#sr');
- const deux=(c,f)=>{if(pause)return;if(c!==prev){prev=c;msg('Lu : '+c+' — confirmation…');return}
-  pause=true;msg('Code lu : '+c+' ('+(f||'?')+')');so.hidden=false;sr.hidden=false;so.onclick=()=>fin(c,f);
+ const deux=(c0,f)=>{if(pause)return;const c=reparer(c0),corr=c!==c0;if(c!==prev){prev=c;msg('Lu : '+c+' — confirmation…');return}
+  pause=true;msg('Code lu : '+c+' ('+(f||'?')+')'+(corr?' — 1er chiffre corrigé ('+c0[0]+' → '+c[0]+')':''));so.hidden=false;sr.hidden=false;so.onclick=()=>fin(c,f);
   sr.onclick=()=>{pause=false;prev='';so.hidden=true;sr.hidden=true;msg('Vise le code-barres…')}};
  ov.querySelector('#sa').onclick=()=>fin(null);
  ov.querySelector('#sk').onclick=()=>{const c=prompt('Chiffres du code-barres :');if(c&&c.trim())fin(c.trim())};
  const f=ov.querySelector('#sf');ov.querySelector('#sp').onclick=()=>f.click();
  f.onchange=async()=>{const file=f.files[0];if(!file)return;msg('Lecture de la photo…');const r=await lirePhoto(file);
-  if(r)fin(r[0],r[1]);else msg('Code non lu : rapproche-toi, évite les reflets et recommence (ou tape le code).')};
+  if(r)fin(reparer(r[0]),r[1]);else msg('Code non lu : rapproche-toi, évite les reflets et recommence (ou tape le code).')};
  try{
   if('BarcodeDetector' in window){
    st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}});
@@ -305,7 +306,7 @@ $('#q').addEventListener('input',e=>{S.q=e.target.value;list()});
 addEventListener('online',()=>{if(db)load()});
 setInterval(()=>{if(db&&(Q.length||HORS))load()},20000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-const VER='v8';
+const VER='v9';
 fetch('index.html',{cache:'no-store'}).then(r=>r.text()).then(t=>{const m=t.match(/VER=\x27([^\x27]+)\x27/);
  if(m&&m[1]!=VER){const d=document.createElement('div');d.style.cssText='position:fixed;bottom:60px;left:8px;right:8px;background:#222;color:#fff;padding:12px;border-radius:10px;z-index:30;text-align:center';
  d.textContent='🔄 Nouvelle version disponible — toucher pour recharger';d.onclick=()=>location.reload();document.body.appendChild(d)}}).catch(()=>{});
