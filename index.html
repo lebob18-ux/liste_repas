@@ -59,7 +59,7 @@ function demarrer(){
  try{LIEU=localStorage.getItem('hfl_'+G)||''}catch(e){}
  if(lireCache())render();load()}
 const $=s=>document.querySelector(s);
-const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[],EX=[],PR=[],SC='',SCF='',Q=[],HORS=false,SY=false,LX=[],LIEU='';const ET={};
+const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[],EX=[],PR=[],SC='',SCF='',SCP=null,Q=[],HORS=false,SY=false,LX=[],LIEU='';const ET={};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const th=u=>(u||'').replace('w_1200','w_480').replace('h_640','h_256');
@@ -189,13 +189,19 @@ function scanner(){return new Promise(async res=>{
 })}
 function variantes(c){c=String(c).trim();if(!/^\d+$/.test(c))return[c];const sans=c.replace(/^0+/,'');
  return[...new Set([c,sans,sans.padStart(13,'0')].filter(x=>x.length>=8))]}
+function poidsOff(p){let v=parseFloat(p.product_quantity),u=(p.product_quantity_unit||'').toLowerCase();
+ if(!(v>0)){const m=String(p.quantity||'').replace(',','.').match(/(?:(\d+)\s*x\s*)?([\d.]+)\s*(kg|g|l|cl|ml)\b/i);
+  if(!m)return null;v=(m[1]?+m[1]:1)*parseFloat(m[2]);u=m[3].toLowerCase()}
+ if(u=='kg'){v*=1000;u='g'}else if(u=='l'){v*=1000;u='ml'}else if(u=='cl'){v*=10;u='ml'}
+ return v>0&&(u=='g'||u=='ml')?{poids:Math.round(v*100)/100,unite:u}:null}
 async function nomProduit(code){const vs=variantes(code);
- const l=PR.find(p=>vs.includes(p.code));if(l)return l.nom;
+ const l=PR.find(p=>vs.includes(p.code));if(l)return{nom:l.nom,poids:l.poids||null,unite:l.poids_unite||''};
  for(const d of['openfoodfacts','openproductsfacts','openbeautyfacts','openpetfoodfacts']){
-  const rs=await Promise.all(vs.map(v=>fetch('https://world.'+d+'.org/api/v2/product/'+encodeURIComponent(v)+'.json?fields=product_name,product_name_fr,generic_name_fr,generic_name')
+  const rs=await Promise.all(vs.map(v=>fetch('https://world.'+d+'.org/api/v2/product/'+encodeURIComponent(v)+'.json?fields=product_name,product_name_fr,generic_name_fr,generic_name,quantity,product_quantity,product_quantity_unit')
    .then(r=>r.json()).catch(()=>null)));
-  for(const j of rs){if(j&&j.status==1){const p=j.product,n=(p.product_name_fr||p.product_name||p.generic_name_fr||p.generic_name||'').trim();if(n)return n}}}
- return''}
+  for(const j of rs){if(j&&j.status==1){const p=j.product,n=(p.product_name_fr||p.product_name||p.generic_name_fr||p.generic_name||'').trim();
+   if(n){const w=poidsOff(p);return{nom:n,poids:w?w.poids:null,unite:w?w.unite:''}}}}}
+ return{nom:'',poids:null,unite:''}}
 function optsLieux(){const l=[...new Set([...LX.map(x=>x.nom),...ST.map(z=>z.lieu).filter(Boolean),LIEU].filter(Boolean))].sort();
  return`<option value="">— Aucun lieu —</option>`+l.map(n=>`<option ${n==LIEU?'selected':''}>${esc(n)}</option>`).join('')+`<option value="__new">＋ Nouveau lieu…</option>`}
 async function chLieu(v){
@@ -207,8 +213,11 @@ async function chLieu(v){
  try{localStorage.setItem('hfl_'+G,LIEU)}catch(e){}list()}
 function grouper(l){const o=[];let k=null;
  [...l].sort((a,b)=>(a.lieu||'~').localeCompare(b.lieu||'~')||norm(a.nom).localeCompare(norm(b.nom))).forEach(z=>{const g=z.lieu||'Sans lieu';if(g!==k){k=g;o.push({h:g})}o.push(z)});return o}
-async function memo(nom){if(!SC)return;const c=SC;SC='';
- const x=await db.from('hf_produits').upsert({code:c,nom},{onConflict:'groupe,code'}).select().single();
+async function memo(nom,q,u){if(!SC)return;
+ const c=SC,w=SCP||(q>0&&['g','kg','ml','cl','l'].includes(u)?{poids:q,unite:u}:null);SC='';SCP=null;
+ const row={code:c,nom};
+ let x=await db.from('hf_produits').upsert(w?{...row,poids:w.poids,poids_unite:w.unite}:row,{onConflict:'groupe,code'}).select().single();
+ if(x.error&&w)x=await db.from('hf_produits').upsert(row,{onConflict:'groupe,code'}).select().single();
  if(!x.error&&x.data){PR=PR.filter(p=>p.code!=c);PR.push(x.data)}}
 function extras(){const t=norm(S.q);
  return`<div class="p"><div class="t">Autres achats</div><input id="xn" placeholder="Produit" autocomplete="off" style="flex:1 1 50%;width:auto">
@@ -256,9 +265,10 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
   const u=e?Object.entries(e.u).sort((x,y)=>y[1]-x[1])[0][0]:'';
   $('#sn').value=nom;if(u){if(![...su.options].some(o=>o.text==u))su.add(new Option(u));su.value=u}
   $('#sq').focus();sug()}
- else if(a=='scan'){const t=b.dataset.t,code=await scanner();if(!code)return;SC=code;const nom=await nomProduit(code);
-  const inf=document.querySelector('.scinfo');if(inf)inf.innerHTML=nom?`Code ${esc(code)}${SCF?' ('+esc(SCF)+')':''} · produit reconnu`:`Code ${esc(code)}${SCF?' ('+esc(SCF)+')':''} · inconnu des bases : <a href="https://www.google.com/search?q=${encodeURIComponent(code)}" target="_blank" rel="noopener">🔎 chercher sur le web</a>, puis tape le nom ci-dessus`;
-  $('#'+t).value=nom;const q=nom?$(t=='sn'?'#sq':'#xq'):$('#'+t);if(q)q.focus();if(t=='sn')sug()}
+ else if(a=='scan'){const t=b.dataset.t,code=await scanner();if(!code)return;SC=code;const pr=await nomProduit(code),nom=pr.nom;SCP=pr.poids?{poids:pr.poids,unite:pr.unite}:null;
+  const inf=document.querySelector('.scinfo');if(inf)inf.innerHTML=nom?`Code ${esc(code)}${SCF?' ('+esc(SCF)+')':''} · produit reconnu${pr.poids?' · contenu '+pr.poids+' '+esc(pr.unite):''}`:`Code ${esc(code)}${SCF?' ('+esc(SCF)+')':''} · inconnu des bases : <a href="https://www.google.com/search?q=${encodeURIComponent(code)}" target="_blank" rel="noopener">🔎 chercher sur le web</a>, puis tape le nom ci-dessus`;
+  $('#'+t).value=nom;if(pr.poids){if(t=='sn'){$('#sq').value=pr.poids;const su=$('#su');if(![...su.options].some(o=>o.text==pr.unite))su.add(new Option(pr.unite));su.value=pr.unite}else $('#xq').value=pr.poids+' '+pr.unite}
+  const q=nom?$(t=='sn'?'#sq':'#xq'):$('#'+t);if(q)q.focus();if(t=='sn')sug()}
  else if(a=='exadd'){const nom=$('#xn').value.trim(),qte=$('#xq').value.trim();if(!nom)return;
   const tmp=-Date.now();EX.push({id:tmp,nom,qte,coche:false});list();ecrireCache();
   await envoyer({t:'ins',table:'hf_extras',row:{nom,qte},tmp});memo(nom)}
@@ -281,7 +291,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
   const ex=ST.find(z=>norm(z.nom)==norm(nom)&&z.unite==u&&(z.lieu||'')==LIEU);
   if(ex){ex.quantite+=q;const x=await db.from('hf_stock').update({quantite:ex.quantite}).eq('id',ex.id);if(x.error)alert(x.error.message)}
   else{const x=await db.from('hf_stock').insert({nom,quantite:q,unite:u,lieu:LIEU}).select().single();if(x.error)return alert(x.error.message);ST.push(x.data)}
-  await memo(nom);
+  await memo(nom,q,u);
   list()}
  else if(a=='lien'){const u=prompt('Colle le lien de la recette (HelloFresh ou site public) :');if(!u)return;
   b.disabled=true;b.textContent='…';
@@ -306,7 +316,7 @@ $('#q').addEventListener('input',e=>{S.q=e.target.value;list()});
 addEventListener('online',()=>{if(db)load()});
 setInterval(()=>{if(db&&(Q.length||HORS))load()},20000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-const VER='v9';
+const VER='v10';
 fetch('index.html',{cache:'no-store'}).then(r=>r.text()).then(t=>{const m=t.match(/VER=\x27([^\x27]+)\x27/);
  if(m&&m[1]!=VER){const d=document.createElement('div');d.style.cssText='position:fixed;bottom:60px;left:8px;right:8px;background:#222;color:#fff;padding:12px;border-radius:10px;z-index:30;text-align:center';
  d.textContent='🔄 Nouvelle version disponible — toucher pour recharger';d.onclick=()=>location.reload();document.body.appendChild(d)}}).catch(()=>{});
