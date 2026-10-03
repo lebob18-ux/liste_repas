@@ -56,9 +56,10 @@ function demarrer(){
   <input id="gn" style="flex:1 1 100%;width:auto" placeholder="nom-du-groupe" autocapitalize="none"><button data-a="gok">Valider</button></div>`;return}
  db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{global:{headers:{'x-groupe':G},fetch:(u,o)=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),8000);return fetch(u,{...o,signal:c.signal}).finally(()=>clearTimeout(t))}}});
  try{Q=JSON.parse(localStorage.getItem('hfq_'+G)||'[]')}catch(e){Q=[]}
+ try{LIEU=localStorage.getItem('hfl_'+G)||''}catch(e){}
  if(lireCache())render();load()}
 const $=s=>document.querySelector(s);
-const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[],EX=[],PR=[],SC='',Q=[],HORS=false,SY=false;const ET={};
+const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[],EX=[],PR=[],SC='',Q=[],HORS=false,SY=false,LX=[],LIEU='';const ET={};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const th=u=>(u||'').replace('w_1200','w_480').replace('h_640','h_256');
@@ -78,7 +79,7 @@ async function load(){await sync();
  const b=await db.from('hf_paniers').select('*').order('id');
  if(a.error||b.error){HORS=true;badge();if(!R.length)$('#list').innerHTML=`<div class="e">Erreur Supabase : ${esc((a.error||b.error).message)}</div>`;return}
  R=a.data;P=b.data;const c=await db.from('hf_stock').select('*').order('nom');if(!c.error)ST=c.data;const dx=await db.from('hf_extras').select('*').order('id');if(!dx.error)EX=dx.data;
- const ey=await db.from('hf_produits').select('*').order('nom');if(!ey.error)PR=ey.data;HORS=false;ecrireCache();render()}
+ const ey=await db.from('hf_produits').select('*').order('nom');if(!ey.error)PR=ey.data;const lx=await db.from('hf_lieux').select('*').order('nom');if(!lx.error)LX=lx.data;HORS=false;ecrireCache();render()}
 
 function render(){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==S.tab));
@@ -105,11 +106,12 @@ function list(){const L=$('#list');
  else if(S.tab=='sto'){const t=norm(S.q);
   
   const us=['g','kg','ml','cl','l','cs','cc','pièce(s)','sachet(s)','pot(s)','paquet(s)','boîte(s)'];
-  const items=ST.filter(z=>!t||norm(z.nom).includes(t));
+  const items=ST.filter(z=>!t||norm(z.nom+' '+(z.lieu||'')).includes(t));
   L.innerHTML=`
+  <div class="p"><div class="t">📍 Lieu de stockage (inventaire)</div><select id="sl" onchange="chLieu(this.value)" style="flex:1;font-size:16px;padding:8px">${optsLieux()}</select><button data-a="ldel">🗑</button></div>
   <div class="p"><input id="sn" oninput="sug()" autocomplete="off" placeholder="Ingrédient (ex : Riz)" style="flex:1 1 60%;width:auto"><button data-a="scan" data-t="sn">📷 Scan</button>
   <input id="sq" type="number" step="any" inputmode="decimal" placeholder="Qté"><select id="su" style="font-size:16px;padding:8px">${us.map(u=>`<option>${u}</option>`).join('')}</select>
-  <button data-a="stadd">＋ Ajouter</button></div><div class="i" style="padding:2px 0;text-align:left">Ingrédients de tes recettes — touche pour choisir :</div><div id="sg" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 12px"></div>`+(items.length?items.map(z=>`<div class="p" data-sid="${z.id}"><div class="t">${esc(z.nom)}</div>
+  <button data-a="stadd">＋ Ajouter</button><div class="scinfo i" style="flex:1 1 100%;text-align:left;padding:0"></div></div><div class="i" style="padding:2px 0;text-align:left">Ingrédients de tes recettes — touche pour choisir :</div><div id="sg" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 12px"></div>`+(items.length?grouper(items).map(z=>z.h?`<h4 style="margin:14px 4px 4px">📍 ${esc(z.h)}</h4>`:`<div class="p" data-sid="${z.id}"><div class="t">${esc(z.nom)}</div>
   <label><input data-s="1" type="number" step="any" inputmode="decimal" value="${z.quantite}"> ${esc(z.unite)}</label><button data-a="stdel">✕</button></div>`).join(''):'<div class="i">Stock vide</div>');sug()}
  else{const t=norm(S.q),m={};
   P.forEach(p=>{const r=rec(p.recette_id);if(r)r.ingredients.forEach((i,ix)=>{const k=norm(i.n);if(!k||(t&&!k.includes(t)))return;
@@ -129,8 +131,8 @@ function ig(){if(_ig&&_ig.n==R.length)return _ig;const m={};
 function sug(){const el=$('#sg');if(!el)return;const t=norm($('#sn')?.value);const have=new Set(ST.map(z=>norm(z.nom)));
  const seen=new Set(),l=[...PR.map(p=>({nom:p.nom,c:0,u:{}})),...ig().l].filter(e=>{const k=norm(e.nom);if(have.has(k)||seen.has(k)||(t&&!k.includes(t)))return false;seen.add(k);return true}).slice(0,60);
  el.innerHTML=l.length?l.map(e=>`<button data-a="pick" data-n="${esc(e.nom)}">${esc(e.nom)}</button>`).join(''):'<span class="i">Aucune suggestion</span>'}
-function ecrireCache(){try{localStorage.setItem('hfc_'+G,JSON.stringify({t:Date.now(),R,P,ST,EX,PR}))}catch(e){}}
-function lireCache(){try{const c=JSON.parse(localStorage.getItem('hfc_'+G)||'null');if(c){R=c.R;P=c.P;ST=c.ST;EX=c.EX;PR=c.PR;return true}}catch(e){}return false}
+function ecrireCache(){try{localStorage.setItem('hfc_'+G,JSON.stringify({t:Date.now(),R,P,ST,EX,PR,LX}))}catch(e){}}
+function lireCache(){try{const c=JSON.parse(localStorage.getItem('hfc_'+G)||'null');if(c){R=c.R;P=c.P;ST=c.ST;EX=c.EX;PR=c.PR;LX=c.LX||[];return true}}catch(e){}return false}
 const sq=()=>{try{localStorage.setItem('hfq_'+G,JSON.stringify(Q))}catch(e){}};
 function badge(){const g=document.querySelector('[data-a="grp"]');if(g)g.textContent=(HORS?'📴 ':'')+'👪 '+G+(Q.length?' ⏳'+Q.length:'')}
 async function envoyer(o){if(o.t=='upd')Q=Q.filter(q=>!(q.t=='upd'&&q.table==o.table&&q.id==o.id));Q.push(o);sq();badge();await sync()}
@@ -178,14 +180,27 @@ function scanner(){return new Promise(async res=>{
  }catch(e){msg('Caméra indisponible ('+(e.name||'erreur')+'). Utilise « Photo » ou « Taper le code ».')}
 })}
 async function nomProduit(code){const l=PR.find(p=>p.code==code);if(l)return l.nom;
- try{const r=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(code)+'.json?fields=product_name,product_name_fr');
-  const j=await r.json();if(j.status==1)return(j.product.product_name_fr||j.product.product_name||'').trim()}catch(e){}return''}
+ for(const d of['openfoodfacts','openproductsfacts','openbeautyfacts','openpetfoodfacts']){
+  try{const r=await fetch('https://world.'+d+'.org/api/v2/product/'+encodeURIComponent(code)+'.json?fields=product_name,product_name_fr,generic_name_fr,generic_name');
+   const j=await r.json();if(j.status==1){const p=j.product,n=(p.product_name_fr||p.product_name||p.generic_name_fr||p.generic_name||'').trim();if(n)return n}}catch(e){}}
+ return''}
+function optsLieux(){const l=[...new Set([...LX.map(x=>x.nom),...ST.map(z=>z.lieu).filter(Boolean),LIEU].filter(Boolean))].sort();
+ return`<option value="">— Aucun lieu —</option>`+l.map(n=>`<option ${n==LIEU?'selected':''}>${esc(n)}</option>`).join('')+`<option value="__new">＋ Nouveau lieu…</option>`}
+async function chLieu(v){
+ if(v=='__new'){const n=(prompt('Nom du nouveau lieu (ex : Placard cuisine, Frigo, Cave) :')||'').trim();
+  if(n){LIEU=n;const x=await db.from('hf_lieux').upsert({nom:n},{onConflict:'groupe,nom'}).select().single();
+   if(x.error)alert('Lieu utilisable, mais non partagé : '+x.error.message);
+   else if(!LX.some(l=>l.nom==n))LX.push(x.data)}}
+ else LIEU=v;
+ try{localStorage.setItem('hfl_'+G,LIEU)}catch(e){}list()}
+function grouper(l){const o=[];let k=null;
+ [...l].sort((a,b)=>(a.lieu||'~').localeCompare(b.lieu||'~')||norm(a.nom).localeCompare(norm(b.nom))).forEach(z=>{const g=z.lieu||'Sans lieu';if(g!==k){k=g;o.push({h:g})}o.push(z)});return o}
 async function memo(nom){if(!SC)return;const c=SC;SC='';
  const x=await db.from('hf_produits').upsert({code:c,nom},{onConflict:'groupe,code'}).select().single();
  if(!x.error&&x.data){PR=PR.filter(p=>p.code!=c);PR.push(x.data)}}
 function extras(){const t=norm(S.q);
  return`<div class="p"><div class="t">Autres achats</div><input id="xn" placeholder="Produit" autocomplete="off" style="flex:1 1 50%;width:auto">
- <input id="xq" placeholder="Qté" style="width:70px"><button data-a="scan" data-t="xn">📷</button><button data-a="exadd">＋</button></div>`+
+ <input id="xq" placeholder="Qté" style="width:70px"><button data-a="scan" data-t="xn">📷</button><button data-a="exadd">＋</button><div class="scinfo i" style="flex:1 1 100%;text-align:left;padding:0"></div></div>`+
  EX.filter(x=>!t||norm(x.nom).includes(t)).map(x=>`<div class="p" data-xid="${x.id}"><label style="flex:1;${x.coche?'text-decoration:line-through;opacity:.55':''}">
  <input type="checkbox" data-a="xchk" ${x.coche?'checked':''} style="transform:scale(1.4);margin-right:8px"><b>${esc(x.nom)}</b> ${esc(x.qte)}</label><button data-a="xdel">✕</button></div>`).join('')}
 function etat(x){const u={};x.l.forEach(y=>{u[y.i.u]=(u[y.i.u]||0)+(y.i.q==null?0:y.i.q*y.p.coef)});
@@ -230,14 +245,19 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
   $('#sn').value=nom;if(u){if(![...su.options].some(o=>o.text==u))su.add(new Option(u));su.value=u}
   $('#sq').focus();sug()}
  else if(a=='scan'){const t=b.dataset.t,code=await scanner();if(!code)return;SC=code;const nom=await nomProduit(code);
-  if(!nom)alert('Produit inconnu : tape son nom, il sera mémorisé pour ce code-barres.');
-  $('#'+t).value=nom;const q=$(t=='sn'?'#sq':'#xq');if(q)q.focus();if(t=='sn')sug()}
+  const inf=document.querySelector('.scinfo');if(inf)inf.innerHTML=nom?`Code ${esc(code)} · produit reconnu`:`Code ${esc(code)} · inconnu des bases : <a href="https://www.google.com/search?q=${encodeURIComponent(code)}" target="_blank" rel="noopener">🔎 chercher sur le web</a>, puis tape le nom ci-dessus`;
+  $('#'+t).value=nom;const q=nom?$(t=='sn'?'#sq':'#xq'):$('#'+t);if(q)q.focus();if(t=='sn')sug()}
  else if(a=='exadd'){const nom=$('#xn').value.trim(),qte=$('#xq').value.trim();if(!nom)return;
   const tmp=-Date.now();EX.push({id:tmp,nom,qte,coche:false});list();ecrireCache();
   await envoyer({t:'ins',table:'hf_extras',row:{nom,qte},tmp});memo(nom)}
  else if(a=='xchk'){const z=EX.find(z=>z.id==+b.closest('[data-xid]').dataset.xid);z.coche=b.checked;
   list();ecrireCache();await envoyer({t:'upd',table:'hf_extras',id:z.id,patch:{coche:z.coche}})}
  else if(a=='xdel'){const xid=+b.closest('[data-xid]').dataset.xid;EX=EX.filter(z=>z.id!=xid);list();ecrireCache();await envoyer({t:'del',table:'hf_extras',id:xid})}
+ else if(a=='ldel'){if(!LIEU)return;
+  if(ST.some(z=>z.lieu==LIEU))return alert('Des articles du stock utilisent encore ce lieu.');
+  if(!confirm('Retirer « '+LIEU+' » de la liste des lieux ?'))return;
+  await db.from('hf_lieux').delete().eq('nom',LIEU);LX=LX.filter(l=>l.nom!=LIEU);LIEU='';
+  try{localStorage.setItem('hfl_'+G,'')}catch(e){}list()}
  else if(a=='gok'){const g=norm($('#gn').value).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
   if(!g)return alert('Nom invalide');G=g;try{localStorage.setItem('hfg',G)}catch(_){}demarrer()}
  else if(a=='grp'){if(confirm('Changer de groupe ? Les données du groupe actuel restent enregistrées.')){try{localStorage.removeItem('hfg')}catch(_){}location.reload()}}
@@ -246,9 +266,9 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
   if(x.error)return alert(x.error.message);ST=ST.filter(z=>z.id!=sid);list()}
  else if(a=='stadd'){const nom=$('#sn').value.trim(),q=parseFloat($('#sq').value),u=$('#su').value;
   if(!nom||!(q>=0))return alert('Ingrédient et quantité requis');
-  const ex=ST.find(z=>norm(z.nom)==norm(nom)&&z.unite==u);
+  const ex=ST.find(z=>norm(z.nom)==norm(nom)&&z.unite==u&&(z.lieu||'')==LIEU);
   if(ex){ex.quantite+=q;const x=await db.from('hf_stock').update({quantite:ex.quantite}).eq('id',ex.id);if(x.error)alert(x.error.message)}
-  else{const x=await db.from('hf_stock').insert({nom,quantite:q,unite:u}).select().single();if(x.error)return alert(x.error.message);ST.push(x.data)}
+  else{const x=await db.from('hf_stock').insert({nom,quantite:q,unite:u,lieu:LIEU}).select().single();if(x.error)return alert(x.error.message);ST.push(x.data)}
   await memo(nom);
   list()}
  else if(a=='lien'){const u=prompt('Colle le lien de la recette (HelloFresh ou site public) :');if(!u)return;
