@@ -59,7 +59,7 @@ function demarrer(){
  try{LIEU=localStorage.getItem('hfl_'+G)||''}catch(e){}
  if(lireCache())render();load()}
 const $=s=>document.querySelector(s);
-const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[],EX=[],PR=[],SC='',Q=[],HORS=false,SY=false,LX=[],LIEU='';const ET={};
+const S={tab:'rec',q:'',mode:'nom',f:'all',m:null,o:{},pers:(()=>{try{return+localStorage.getItem('hfp')||4}catch(e){return 4}})()};let R=[],P=[],ST=[],EX=[],PR=[],SC='',SCF='',Q=[],HORS=false,SY=false,LX=[],LIEU='';const ET={};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const th=u=>(u||'').replace('w_1200','w_480').replace('h_640','h_256');
@@ -147,11 +147,13 @@ async function sync(){if(SY||!db||!Q.length)return;SY=true;
  finally{SY=false;ecrireCache();badge()}}
 function chargerZX(){return window.ZXing?Promise.resolve():new Promise((ok,ko)=>{const e=document.createElement('script');
  e.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';e.onload=ok;e.onerror=ko;document.head.appendChild(e)})}
-const zxHints=()=>new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E,ZXing.BarcodeFormat.CODE_128]],[ZXing.DecodeHintType.TRY_HARDER,true]]);
+const zxHints=()=>new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]],[ZXing.DecodeHintType.TRY_HARDER,true]]);
+const BD_FMT=['ean_13','ean_8','upc_a','upc_e'];
+const zxFmt=r=>{try{return ZXing.BarcodeFormat[r.getBarcodeFormat()]||''}catch(e){return''}};
 async function lirePhoto(file){
- try{if('BarcodeDetector' in window){const r=await new BarcodeDetector().detect(await createImageBitmap(file));if(r.length)return r[0].rawValue}
+ try{if('BarcodeDetector' in window){const r=await new BarcodeDetector({formats:BD_FMT}).detect(await createImageBitmap(file));if(r.length)return[r[0].rawValue,r[0].format]}
   await chargerZX();const url=URL.createObjectURL(file);
-  try{return(await new ZXing.BrowserMultiFormatReader(zxHints()).decodeFromImageUrl(url)).getText()}finally{URL.revokeObjectURL(url)}
+  try{const r=await new ZXing.BrowserMultiFormatReader(zxHints()).decodeFromImageUrl(url);return[r.getText(),zxFmt(r)]}finally{URL.revokeObjectURL(url)}
  }catch(e){return null}}
 function scanner(){return new Promise(async res=>{
  const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:#000;z-index:20;display:flex;flex-direction:column';
@@ -160,29 +162,34 @@ function scanner(){return new Promise(async res=>{
  <div style="padding:10px;display:flex;gap:8px;flex-wrap:wrap;background:#111"><button id="sp">📸 Photo</button><button id="sk">⌨️ Taper le code</button><button id="sa">Annuler</button></div>
  <input id="sf" type="file" accept="image/*" capture="environment" hidden>`;
  document.body.appendChild(ov);const v=ov.querySelector('video'),msg=t=>ov.querySelector('#sm').textContent=t;
- let on=true,st=null,zr=null;
- const fin=c=>{if(!on)return;on=false;if(st)st.getTracks().forEach(t=>t.stop());if(zr)try{zr.reset()}catch(e){}ov.remove();res(c)};
+ let on=true,st=null,zr=null,prev='';
+ const fin=(c,f)=>{if(!on)return;on=false;SCF=f||'';if(st)st.getTracks().forEach(t=>t.stop());if(zr)try{zr.reset()}catch(e){}ov.remove();res(c)};
+ const deux=(c,f)=>{if(c===prev)fin(c,f);else{prev=c;msg('Lu : '+c+' — confirmation…')}}; // 2 lectures identiques = fiable
  ov.querySelector('#sa').onclick=()=>fin(null);
  ov.querySelector('#sk').onclick=()=>{const c=prompt('Chiffres du code-barres :');if(c&&c.trim())fin(c.trim())};
  const f=ov.querySelector('#sf');ov.querySelector('#sp').onclick=()=>f.click();
- f.onchange=async()=>{const file=f.files[0];if(!file)return;msg('Lecture de la photo…');const c=await lirePhoto(file);
-  if(c)fin(c);else msg('Code non lu : rapproche-toi, évite les reflets et recommence (ou tape le code).')};
+ f.onchange=async()=>{const file=f.files[0];if(!file)return;msg('Lecture de la photo…');const r=await lirePhoto(file);
+  if(r)fin(r[0],r[1]);else msg('Code non lu : rapproche-toi, évite les reflets et recommence (ou tape le code).')};
  try{
   if('BarcodeDetector' in window){
    st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
    if(!on){st.getTracks().forEach(t=>t.stop());return}
-   v.srcObject=st;await v.play();const d=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
-   while(on){try{const r=await d.detect(v);if(r.length){fin(r[0].rawValue);return}}catch(e){}await new Promise(r=>setTimeout(r,250))}
+   v.srcObject=st;await v.play();const d=new BarcodeDetector({formats:BD_FMT});
+   while(on){try{const r=await d.detect(v);if(r.length)deux(r[0].rawValue,r[0].format)}catch(e){}await new Promise(r=>setTimeout(r,250))}
   }else{
    msg('Chargement du lecteur…');await chargerZX();zr=new ZXing.BrowserMultiFormatReader(zxHints());msg('Vise le code-barres…');
-   zr.decodeFromVideoDevice(null,v,r=>{if(r)fin(r.getText())});
+   zr.decodeFromVideoDevice(null,v,r=>{if(r)deux(r.getText(),zxFmt(r))});
   }
  }catch(e){msg('Caméra indisponible ('+(e.name||'erreur')+'). Utilise « Photo » ou « Taper le code ».')}
 })}
-async function nomProduit(code){const l=PR.find(p=>p.code==code);if(l)return l.nom;
+function variantes(c){c=String(c).trim();if(!/^\d+$/.test(c))return[c];const sans=c.replace(/^0+/,'');
+ return[...new Set([c,sans,sans.padStart(13,'0')].filter(x=>x.length>=8))]}
+async function nomProduit(code){const vs=variantes(code);
+ const l=PR.find(p=>vs.includes(p.code));if(l)return l.nom;
  for(const d of['openfoodfacts','openproductsfacts','openbeautyfacts','openpetfoodfacts']){
-  try{const r=await fetch('https://world.'+d+'.org/api/v2/product/'+encodeURIComponent(code)+'.json?fields=product_name,product_name_fr,generic_name_fr,generic_name');
-   const j=await r.json();if(j.status==1){const p=j.product,n=(p.product_name_fr||p.product_name||p.generic_name_fr||p.generic_name||'').trim();if(n)return n}}catch(e){}}
+  const rs=await Promise.all(vs.map(v=>fetch('https://world.'+d+'.org/api/v2/product/'+encodeURIComponent(v)+'.json?fields=product_name,product_name_fr,generic_name_fr,generic_name')
+   .then(r=>r.json()).catch(()=>null)));
+  for(const j of rs){if(j&&j.status==1){const p=j.product,n=(p.product_name_fr||p.product_name||p.generic_name_fr||p.generic_name||'').trim();if(n)return n}}}
  return''}
 function optsLieux(){const l=[...new Set([...LX.map(x=>x.nom),...ST.map(z=>z.lieu).filter(Boolean),LIEU].filter(Boolean))].sort();
  return`<option value="">— Aucun lieu —</option>`+l.map(n=>`<option ${n==LIEU?'selected':''}>${esc(n)}</option>`).join('')+`<option value="__new">＋ Nouveau lieu…</option>`}
@@ -245,7 +252,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
   $('#sn').value=nom;if(u){if(![...su.options].some(o=>o.text==u))su.add(new Option(u));su.value=u}
   $('#sq').focus();sug()}
  else if(a=='scan'){const t=b.dataset.t,code=await scanner();if(!code)return;SC=code;const nom=await nomProduit(code);
-  const inf=document.querySelector('.scinfo');if(inf)inf.innerHTML=nom?`Code ${esc(code)} · produit reconnu`:`Code ${esc(code)} · inconnu des bases : <a href="https://www.google.com/search?q=${encodeURIComponent(code)}" target="_blank" rel="noopener">🔎 chercher sur le web</a>, puis tape le nom ci-dessus`;
+  const inf=document.querySelector('.scinfo');if(inf)inf.innerHTML=nom?`Code ${esc(code)}${SCF?' ('+esc(SCF)+')':''} · produit reconnu`:`Code ${esc(code)}${SCF?' ('+esc(SCF)+')':''} · inconnu des bases : <a href="https://www.google.com/search?q=${encodeURIComponent(code)}" target="_blank" rel="noopener">🔎 chercher sur le web</a>, puis tape le nom ci-dessus`;
   $('#'+t).value=nom;const q=nom?$(t=='sn'?'#sq':'#xq'):$('#'+t);if(q)q.focus();if(t=='sn')sug()}
  else if(a=='exadd'){const nom=$('#xn').value.trim(),qte=$('#xq').value.trim();if(!nom)return;
   const tmp=-Date.now();EX.push({id:tmp,nom,qte,coche:false});list();ecrireCache();
