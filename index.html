@@ -87,7 +87,7 @@ function render(){
  const bt=(a,v,t,on)=>`<button data-a="${a}" data-v="${v}" class="${on?'on':''}">${t}</button>`;
  $('#bar').innerHTML=S.tab=='rec'?bt('mode','nom','Nom',S.mode=='nom')+bt('mode','ing','Ingrédient',S.mode=='ing')+bt('lien','','＋ Lien',false)+' | '+
   [['all','Toutes'],['fav','★ Favoris'],['afaire','À faire'],['fait','✓ Faites']].map(([v,t])=>bt('f',v,t,S.f==v)).join(''):'';
- $('#bar').innerHTML+=`<span style="white-space:nowrap;margin-left:auto">👥 Pour <select id="pers" style="font-size:16px;padding:4px">${[1,2,3,4,5,6,8].map(n=>`<option ${n==S.pers?'selected':''}>${n}</option>`).join('')}</select><button data-a="grp" style="margin-left:6px">${HORS?'📴 ':''}👪 ${esc(G)}${Q.length?' ⏳'+Q.length:''}</button></span>`;
+ $('#bar').innerHTML+=`<span style="white-space:nowrap;margin-left:auto">👥 Pour <select id="pers" style="font-size:16px;padding:4px">${[1,2,3,4,5,6,8].map(n=>`<option ${n==S.pers?'selected':''}>${n}</option>`).join('')}</select><button data-a="grp" style="margin-left:6px">${HORS?'📴 ':''}👪 ${esc(G)}${Q.length?' ⏳'+Q.length:''}</button><span style="font-size:11px;color:#888;margin-left:4px">${VER}</span></span>`;
  if(S.tab=='cou')$('#bar').innerHTML=bt('cf','all','Tout',S.cf!='buy')+bt('cf','buy','À acheter',S.cf=='buy')+$('#bar').innerHTML;
  list()}
 
@@ -148,6 +148,7 @@ async function sync(){if(SY||!db||!Q.length)return;SY=true;
 function chargerZX(){return window.ZXing?Promise.resolve():new Promise((ok,ko)=>{const e=document.createElement('script');
  e.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';e.onload=ok;e.onerror=ko;document.head.appendChild(e)})}
 const zxHints=()=>new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]],[ZXing.DecodeHintType.TRY_HARDER,true]]);
+function gtinOk(c){if(!/^(\d{8}|\d{12,14})$/.test(c))return false;const d=[...c].map(Number);return(10-d.slice(0,-1).reverse().reduce((s,x,i)=>s+x*(i%2?1:3),0)%10)%10==d[d.length-1]}
 const BD_FMT=['ean_13','ean_8','upc_a','upc_e'];
 const zxFmt=r=>{try{return ZXing.BarcodeFormat[r.getBarcodeFormat()]||''}catch(e){return''}};
 async function lirePhoto(file){
@@ -159,12 +160,15 @@ function scanner(){return new Promise(async res=>{
  const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:#000;z-index:20;display:flex;flex-direction:column';
  ov.innerHTML=`<video playsinline muted autoplay style="flex:1;min-height:0;width:100%;object-fit:cover"></video>
  <div id="sm" style="color:#fff;text-align:center;padding:8px;font-size:14px">Vise le code-barres…</div>
- <div style="padding:10px;display:flex;gap:8px;flex-wrap:wrap;background:#111"><button id="sp">📸 Photo</button><button id="sk">⌨️ Taper le code</button><button id="sa">Annuler</button></div>
+ <div style="padding:10px;display:flex;gap:8px;flex-wrap:wrap;background:#111"><button id="so" hidden>✅ Utiliser ce code</button><button id="sr" hidden>↻ Relire</button><button id="sp">📸 Photo</button><button id="sk">⌨️ Taper le code</button><button id="sa">Annuler</button></div>
  <input id="sf" type="file" accept="image/*" capture="environment" hidden>`;
  document.body.appendChild(ov);const v=ov.querySelector('video'),msg=t=>ov.querySelector('#sm').textContent=t;
- let on=true,st=null,zr=null,prev='';
+ let on=true,st=null,zr=null,prev='',pause=false;
  const fin=(c,f)=>{if(!on)return;on=false;SCF=f||'';if(st)st.getTracks().forEach(t=>t.stop());if(zr)try{zr.reset()}catch(e){}ov.remove();res(c)};
- const deux=(c,f)=>{if(c===prev)fin(c,f);else{prev=c;msg('Lu : '+c+' — confirmation…')}}; // 2 lectures identiques = fiable
+ const so=ov.querySelector('#so'),sr=ov.querySelector('#sr');
+ const deux=(c,f)=>{if(pause)return;if(c!==prev){prev=c;msg('Lu : '+c+' — confirmation…');return}
+  pause=true;msg('Code lu : '+c+' ('+(f||'?')+')');so.hidden=false;sr.hidden=false;so.onclick=()=>fin(c,f);
+  sr.onclick=()=>{pause=false;prev='';so.hidden=true;sr.hidden=true;msg('Vise le code-barres…')}};
  ov.querySelector('#sa').onclick=()=>fin(null);
  ov.querySelector('#sk').onclick=()=>{const c=prompt('Chiffres du code-barres :');if(c&&c.trim())fin(c.trim())};
  const f=ov.querySelector('#sf');ov.querySelector('#sp').onclick=()=>f.click();
@@ -172,13 +176,13 @@ function scanner(){return new Promise(async res=>{
   if(r)fin(r[0],r[1]);else msg('Code non lu : rapproche-toi, évite les reflets et recommence (ou tape le code).')};
  try{
   if('BarcodeDetector' in window){
-   st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+   st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}});
    if(!on){st.getTracks().forEach(t=>t.stop());return}
    v.srcObject=st;await v.play();const d=new BarcodeDetector({formats:BD_FMT});
-   while(on){try{const r=await d.detect(v);if(r.length)deux(r[0].rawValue,r[0].format)}catch(e){}await new Promise(r=>setTimeout(r,250))}
+   while(on){try{const r=await d.detect(v);if(r.length){const m=r.find(x=>gtinOk(x.rawValue))||r[0];deux(m.rawValue,m.format)}}catch(e){}await new Promise(r=>setTimeout(r,250))}
   }else{
    msg('Chargement du lecteur…');await chargerZX();zr=new ZXing.BrowserMultiFormatReader(zxHints());msg('Vise le code-barres…');
-   zr.decodeFromVideoDevice(null,v,r=>{if(r)deux(r.getText(),zxFmt(r))});
+   zr.decodeFromConstraints({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}},v,r=>{if(r)deux(r.getText(),zxFmt(r))});
   }
  }catch(e){msg('Caméra indisponible ('+(e.name||'erreur')+'). Utilise « Photo » ou « Taper le code ».')}
 })}
@@ -301,5 +305,9 @@ $('#q').addEventListener('input',e=>{S.q=e.target.value;list()});
 addEventListener('online',()=>{if(db)load()});
 setInterval(()=>{if(db&&(Q.length||HORS))load()},20000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+const VER='v8';
+fetch('index.html',{cache:'no-store'}).then(r=>r.text()).then(t=>{const m=t.match(/VER=\x27([^\x27]+)\x27/);
+ if(m&&m[1]!=VER){const d=document.createElement('div');d.style.cssText='position:fixed;bottom:60px;left:8px;right:8px;background:#222;color:#fff;padding:12px;border-radius:10px;z-index:30;text-align:center';
+ d.textContent='🔄 Nouvelle version disponible — toucher pour recharger';d.onclick=()=>location.reload();document.body.appendChild(d)}}).catch(()=>{});
 demarrer();
 </script></body></html>
