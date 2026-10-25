@@ -109,9 +109,9 @@ function list(){const L=$('#list');
   const items=ST.filter(z=>!t||norm(z.nom+' '+(z.lieu||'')).includes(t));
   L.innerHTML=`
   <div class="p"><div class="t">📍 Lieu de stockage (inventaire)</div><select id="sl" onchange="chLieu(this.value)" style="flex:1;font-size:16px;padding:8px">${optsLieux()}</select><button data-a="ldel">🗑</button></div>
-  <div class="p"><input id="sn" oninput="sug()" autocomplete="off" placeholder="Ingrédient (ex : Riz)" style="flex:1 1 60%;width:auto"><button data-a="scan" data-t="sn">📷 Scan</button>
+  <div class="p"><input id="sn" oninput="sug()" onfocus="sug(true)" onblur="setTimeout(()=>sug(false),250)" autocomplete="off" placeholder="Ingrédient (ex : Riz)" style="flex:1 1 60%;width:auto"><button data-a="scan" data-t="sn">📷 Scan</button><div id="sg" style="display:none;flex:1 1 100%;max-height:260px;overflow:auto;border:1px solid #ccc;border-radius:8px;background:#fafafa"></div>
   <input id="sq" type="number" step="any" inputmode="decimal" placeholder="Qté"><select id="su" style="font-size:16px;padding:8px">${us.map(u=>`<option>${u}</option>`).join('')}</select>
-  <button data-a="stadd">＋ Ajouter</button><div class="scinfo i" style="flex:1 1 100%;text-align:left;padding:0"></div></div><div class="i" style="padding:2px 0;text-align:left">Ingrédients de tes recettes — touche pour choisir :</div><div id="sg" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 12px"></div>`+(items.length?grouper(items).map(z=>z.h?`<h4 style="margin:14px 4px 4px">📍 ${esc(z.h)}</h4>`:`<div class="p" data-sid="${z.id}"><div class="t">${esc(z.nom)}</div>
+  <button data-a="stadd">＋ Ajouter</button><div class="scinfo i" style="flex:1 1 100%;text-align:left;padding:0"></div></div>`+(items.length?grouper(items).map(z=>z.h?`<h4 style="margin:14px 4px 4px">📍 ${esc(z.h)}</h4>`:`<div class="p" data-sid="${z.id}"><div class="t">${esc(z.nom)}</div>
   <label><input data-s="1" type="number" step="any" inputmode="decimal" value="${z.quantite}"> ${esc(z.unite)}</label><button data-a="stdel">✕</button></div>`).join(''):'<div class="i">Stock vide</div>');sug()}
  else{const t=norm(S.q),m={};
   P.forEach(p=>{const r=rec(p.recette_id);if(r)r.ingredients.forEach((i,ix)=>{const k=norm(i.n);if(!k||(t&&!k.includes(t)))return;
@@ -128,145 +128,15 @@ let _ig=null;
 function ig(){if(_ig&&_ig.n==R.length)return _ig;const m={};
  R.forEach(r=>r.ingredients.forEach(i=>{if(!i.n)return;const k=norm(i.n);const e=m[k]??={nom:i.n,c:0,u:{}};e.c++;e.u[i.u]=(e.u[i.u]||0)+1}));
  _ig={n:R.length,l:Object.values(m).sort((a,b)=>b.c-a.c)};return _ig}
-function sug(){const el=$('#sg');if(!el)return;const t=norm($('#sn')?.value);const have=new Set(ST.map(z=>norm(z.nom)));
- const seen=new Set(),l=[...PR.map(p=>({nom:p.nom,c:0,u:{}})),...ig().l].filter(e=>{const k=norm(e.nom);if(have.has(k)||seen.has(k)||(t&&!k.includes(t)))return false;seen.add(k);return true}).slice(0,60);
- el.innerHTML=l.length?l.map(e=>`<button data-a="pick" data-n="${esc(e.nom)}">${esc(e.nom)}</button>`).join(''):'<span class="i">Aucune suggestion</span>'}
-function ecrireCache(){try{localStorage.setItem('hfc_'+G,JSON.stringify({t:Date.now(),R,P,ST,EX,PR,LX}))}catch(e){}}
-function lireCache(){try{const c=JSON.parse(localStorage.getItem('hfc_'+G)||'null');if(c){R=c.R;P=c.P;ST=c.ST;EX=c.EX;PR=c.PR;LX=c.LX||[];return true}}catch(e){}return false}
-const sq=()=>{try{localStorage.setItem('hfq_'+G,JSON.stringify(Q))}catch(e){}};
-function badge(){const g=document.querySelector('[data-a="grp"]');if(g)g.textContent=(HORS?'📴 ':'')+'👪 '+G+(Q.length?' ⏳'+Q.length:'')}
-async function envoyer(o){if(o.t=='upd')Q=Q.filter(q=>!(q.t=='upd'&&q.table==o.table&&q.id==o.id));Q.push(o);sq();badge();await sync()}
-async function sync(){if(SY||!db||!Q.length)return;SY=true;
- try{while(Q.length){const o=Q[0];let x;
-  if(o.t=='ins'){x=await db.from(o.table).insert(o.row).select().single();
-   if(!x.error){const z=(o.table=='hf_stock'?ST:EX).find(z=>z.id==o.tmp);if(z)Object.assign(z,x.data);Q.forEach(q=>{if(q.id==o.tmp)q.id=x.data.id})}}
-  else if(o.t=='del')x=await db.from(o.table).delete().eq('id',o.id);
-  else x=await db.from(o.table).update(o.patch).eq('id',o.id);
-  if(x.error&&/fetch|abort|network|load failed/i.test(x.error.message)){HORS=true;break}
-  Q=Q.filter(q=>q!==o);sq()}}
- finally{SY=false;ecrireCache();badge()}}
-function chargerZX(){return window.ZXing?Promise.resolve():new Promise((ok,ko)=>{const e=document.createElement('script');
- e.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';e.onload=ok;e.onerror=ko;document.head.appendChild(e)})}
-const zxHints=()=>new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]],[ZXing.DecodeHintType.TRY_HARDER,true]]);
-function gtinOk(c){if(!/^(\d{8}|\d{12,14})$/.test(c))return false;const d=[...c].map(Number);return(10-d.slice(0,-1).reverse().reduce((s,x,i)=>s+x*(i%2?1:3),0)%10)%10==d[d.length-1]}
-function reparer(c){if(!/^\d{13}$/.test(c)||gtinOk(c))return c;for(let d=0;d<10;d++){const t=d+c.slice(1);if(gtinOk(t))return t}return c}
-const BD_FMT=['ean_13','ean_8','upc_a','upc_e'];
-const zxFmt=r=>{try{return ZXing.BarcodeFormat[r.getBarcodeFormat()]||''}catch(e){return''}};
-async function lirePhoto(file){
- try{if('BarcodeDetector' in window){const r=await new BarcodeDetector({formats:BD_FMT}).detect(await createImageBitmap(file));if(r.length)return[r[0].rawValue,r[0].format]}
-  await chargerZX();const url=URL.createObjectURL(file);
-  try{const r=await new ZXing.BrowserMultiFormatReader(zxHints()).decodeFromImageUrl(url);return[r.getText(),zxFmt(r)]}finally{URL.revokeObjectURL(url)}
- }catch(e){return null}}
-function scanner(){return new Promise(async res=>{
- const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:#000;z-index:20;display:flex;flex-direction:column';
- ov.innerHTML=`<video playsinline muted autoplay style="flex:1;min-height:0;width:100%;object-fit:cover"></video>
- <div id="sm" style="color:#fff;text-align:center;padding:8px;font-size:14px">Vise le code-barres…</div>
- <div style="padding:10px;display:flex;gap:8px;flex-wrap:wrap;background:#111"><button id="so" hidden>✅ Utiliser ce code</button><button id="sr" hidden>↻ Relire</button><button id="sp">📸 Photo</button><button id="sk">⌨️ Taper le code</button><button id="sa">Annuler</button></div>
- <input id="sf" type="file" accept="image/*" capture="environment" hidden>`;
- document.body.appendChild(ov);const v=ov.querySelector('video'),msg=t=>ov.querySelector('#sm').textContent=t;
- let on=true,st=null,zr=null,prev='',pause=false;
- const fin=(c,f)=>{if(!on)return;on=false;SCF=f||'';if(st)st.getTracks().forEach(t=>t.stop());if(zr)try{zr.reset()}catch(e){}ov.remove();res(c)};
- const so=ov.querySelector('#so'),sr=ov.querySelector('#sr');
- const deux=(c0,f)=>{if(pause)return;const c=reparer(c0),corr=c!==c0;if(c!==prev){prev=c;msg('Lu : '+c+' — confirmation…');return}
-  pause=true;msg('Code lu : '+c+' ('+(f||'?')+')'+(corr?' — 1er chiffre corrigé ('+c0[0]+' → '+c[0]+')':''));so.hidden=false;sr.hidden=false;so.onclick=()=>fin(c,f);
-  sr.onclick=()=>{pause=false;prev='';so.hidden=true;sr.hidden=true;msg('Vise le code-barres…')}};
- ov.querySelector('#sa').onclick=()=>fin(null);
- ov.querySelector('#sk').onclick=()=>{const c=prompt('Chiffres du code-barres :');if(c&&c.trim())fin(c.trim())};
- const f=ov.querySelector('#sf');ov.querySelector('#sp').onclick=()=>f.click();
- f.onchange=async()=>{const file=f.files[0];if(!file)return;msg('Lecture de la photo…');const r=await lirePhoto(file);
-  if(r)fin(reparer(r[0]),r[1]);else msg('Code non lu : rapproche-toi, évite les reflets et recommence (ou tape le code).')};
- try{
-  if('BarcodeDetector' in window){
-   st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}});
-   if(!on){st.getTracks().forEach(t=>t.stop());return}
-   v.srcObject=st;await v.play();const d=new BarcodeDetector({formats:BD_FMT});
-   while(on){try{const r=await d.detect(v);if(r.length){const m=r.find(x=>gtinOk(x.rawValue))||r[0];deux(m.rawValue,m.format)}}catch(e){}await new Promise(r=>setTimeout(r,250))}
-  }else{
-   msg('Chargement du lecteur…');await chargerZX();zr=new ZXing.BrowserMultiFormatReader(zxHints());msg('Vise le code-barres…');
-   zr.decodeFromConstraints({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}},v,r=>{if(r)deux(r.getText(),zxFmt(r))});
-  }
- }catch(e){msg('Caméra indisponible ('+(e.name||'erreur')+'). Utilise « Photo » ou « Taper le code ».')}
-})}
-function variantes(c){c=String(c).trim();if(!/^\d+$/.test(c))return[c];const sans=c.replace(/^0+/,'');
- return[...new Set([c,sans,sans.padStart(13,'0')].filter(x=>x.length>=8))]}
-function poidsOff(p){let v=parseFloat(p.product_quantity),u=(p.product_quantity_unit||'').toLowerCase();
- if(!(v>0)){const m=String(p.quantity||'').replace(',','.').match(/(?:(\d+)\s*x\s*)?([\d.]+)\s*(kg|g|l|cl|ml)\b/i);
-  if(!m)return null;v=(m[1]?+m[1]:1)*parseFloat(m[2]);u=m[3].toLowerCase()}
- if(u=='kg'){v*=1000;u='g'}else if(u=='l'){v*=1000;u='ml'}else if(u=='cl'){v*=10;u='ml'}
- return v>0&&(u=='g'||u=='ml')?{poids:Math.round(v*100)/100,unite:u}:null}
-async function nomProduit(code){const vs=variantes(code);
- const l=PR.find(p=>vs.includes(p.code));if(l)return{nom:l.nom,poids:l.poids||null,unite:l.poids_unite||''};
- for(const d of['openfoodfacts','openproductsfacts','openbeautyfacts','openpetfoodfacts']){
-  const rs=await Promise.all(vs.map(v=>fetch('https://world.'+d+'.org/api/v2/product/'+encodeURIComponent(v)+'.json?fields=product_name,product_name_fr,generic_name_fr,generic_name,quantity,product_quantity,product_quantity_unit')
-   .then(r=>r.json()).catch(()=>null)));
-  for(const j of rs){if(j&&j.status==1){const p=j.product,n=(p.product_name_fr||p.product_name||p.generic_name_fr||p.generic_name||'').trim();
-   if(n){const w=poidsOff(p);return{nom:n,poids:w?w.poids:null,unite:w?w.unite:''}}}}}
- return{nom:'',poids:null,unite:''}}
-function optsLieux(n){const l=[...new Set([...LX.map(x=>x.nom),...ST.map(z=>z.lieu).filter(Boolean),LIEU].filter(Boolean))].sort();
- return`<option value="">— Aucun lieu —</option>`+l.map(n=>`<option ${n==LIEU?'selected':''}>${esc(n)}</option>`).join('')+(n===false?'':`<option value="__new">＋ Nouveau lieu…</option>`)}
-async function chLieu(v){
- if(v=='__new'){const n=(prompt('Nom du nouveau lieu (ex : Placard cuisine, Frigo, Cave) :')||'').trim();
-  if(n){LIEU=n;const x=await db.from('hf_lieux').upsert({nom:n},{onConflict:'groupe,nom'}).select().single();
-   if(x.error)alert('Lieu utilisable, mais non partagé : '+x.error.message);
-   else if(!LX.some(l=>l.nom==n))LX.push(x.data)}}
- else LIEU=v;
- try{localStorage.setItem('hfl_'+G,LIEU)}catch(e){}list()}
-function grouper(l){const o=[];let k=null;
- [...l].sort((a,b)=>(a.lieu||'~').localeCompare(b.lieu||'~')||norm(a.nom).localeCompare(norm(b.nom))).forEach(z=>{const g=z.lieu||'Sans lieu';if(g!==k){k=g;o.push({h:g})}o.push(z)});return o}
-async function memo(nom,q,u){if(!SC)return;
- const c=SC,w=SCP||(q>0&&['g','kg','ml','cl','l'].includes(u)?{poids:q,unite:u}:null);SC='';SCP=null;
- const row={code:c,nom};
- let x=await db.from('hf_produits').upsert(w?{...row,poids:w.poids,poids_unite:w.unite}:row,{onConflict:'groupe,code'}).select().single();
- if(x.error&&w)x=await db.from('hf_produits').upsert(row,{onConflict:'groupe,code'}).select().single();
- if(!x.error&&x.data){PR=PR.filter(p=>p.code!=c);PR.push(x.data)}}
-function chargerTess(){return window.Tesseract?Promise.resolve():new Promise((ok,ko)=>{const e=document.createElement('script');
- e.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';e.onload=ok;e.onerror=ko;document.head.appendChild(e)})}
-async function prepaImage(file){const bm=await createImageBitmap(file);const k=Math.min(1,1800/Math.max(bm.width,bm.height));
- const c=document.createElement('canvas');c.width=Math.round(bm.width*k);c.height=Math.round(bm.height*k);
- const g=c.getContext('2d');g.drawImage(bm,0,0,c.width,c.height);
- const d=g.getImageData(0,0,c.width,c.height),a=d.data;let mn=255,mx=0;
- for(let i=0;i<a.length;i+=4){const y=.299*a[i]+.587*a[i+1]+.114*a[i+2];a[i]=a[i+1]=a[i+2]=y;if(y<mn)mn=y;if(y>mx)mx=y}
- const r=(mx-mn)||1;for(let i=0;i<a.length;i+=4){const v=Math.max(0,Math.min(255,(a[i]-mn)*255/r));a[i]=a[i+1]=a[i+2]=v}
- g.putImageData(d,0,0);return c}
-const netLigne=t=>t.replace(/^[\s\-–—•*·☐□✓✔\[\]()|_.>]+/,'').replace(/[|_]+/g,' ').replace(/\s+/g,' ').trim();
-async function lireListe(file){
- const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:#fff;z-index:20;display:flex;flex-direction:column;padding:12px;gap:8px';
- ov.innerHTML=`<div id="om" style="font-weight:600">Préparation…</div>
- <textarea id="ot" hidden style="flex:1;font-size:16px;padding:8px"></textarea>
- <div style="display:flex;gap:8px"><button id="oa" hidden style="padding:12px 18px;font-weight:700;background:#2e7d32;color:#fff;border-color:#2e7d32">AJOUTER LES LIGNES</button><button id="oc" style="padding:12px 18px">Annuler</button></div>`;
- document.body.appendChild(ov);const m=t=>ov.querySelector('#om').textContent=t;ov.querySelector('#oc').onclick=()=>ov.remove();
- try{m('Chargement du lecteur (1re fois : quelques Mo)…');await chargerTess();
-  const img=await prepaImage(file);m('Lecture en cours… 0 %');
-  const r=await Tesseract.recognize(img,'fra',{logger:x=>{if(x.status=='recognizing text')m('Lecture en cours… '+Math.round(x.progress*100)+' %')}});
-  const lignes=r.data.text.split(/\r?\n/).map(netLigne).filter(t=>t.length>1&&/[a-zA-ZÀ-ÿ0-9]/.test(t));
-  const ta=ov.querySelector('#ot');ta.value=lignes.join('\n');ta.hidden=false;ov.querySelector('#oa').hidden=false;
-  m(lignes.length?'Vérifie et corrige : une ligne par article.':'Aucun texte lu. Retente avec une photo plus nette, ou tape ta liste ici (une ligne par article).');
-  ov.querySelector('#oa').onclick=async()=>{const l=ta.value.split('\n').map(x=>x.trim()).filter(Boolean);ov.remove();await ajouterExtras(l)}
- }catch(e){m('Lecture impossible ('+(e.message||e)+'). Vérifie ta connexion.')}}
-async function ajouterExtras(l){let i=0;
- for(const t of l){const q=t.match(/^(\d+(?:[.,]\d+)?\s*(?:kg|g|l|cl|ml|x)?)\s+(.+)$/i);
-  let nom=(q?q[2]:t).trim(),qte=q?q[1].trim():'';nom=nom.charAt(0).toUpperCase()+nom.slice(1);
-  const tmp=-Date.now()-(i++);EX.push({id:tmp,nom,qte,coche:false});ecrireCache();
-  await envoyer({t:'ins',table:'hf_extras',row:{nom,qte},tmp})}
- list()}
-const UNI=['g','kg','ml','cl','l','pièce(s)','sachet(s)','paquet(s)','pot(s)','boîte(s)'];
-function formRng(nom,need,units,q,uSel,titre){const us=[...new Set([...(units||[]).filter(Boolean),...UNI])];
- return`<div class="p" data-rng data-nom="${esc(nom)}" data-need="${esc(JSON.stringify(need||{}))}" style="box-shadow:none;padding:6px 0;margin:4px 0 0;border-top:1px solid #eee">
- <div class="t" style="font-size:13px;font-weight:400">📦 ${esc(titre)}</div>
- <input class="rq" type="number" step="any" inputmode="decimal" placeholder="Acheté" value="${q??''}">
- <select class="ru" style="font-size:16px;padding:8px">${us.map(z=>`<option ${z==uSel?'selected':''}>${esc(z)}</option>`).join('')}</select>
- <select class="rl" style="font-size:16px;padding:8px">${optsLieux(false)}</select><button data-a="rng">Ranger</button></div>`}
-function xForm(x){const m=String(x.qte||'').replace(',','.').match(/^\s*([\d.]+)\s*(kg|g|l|cl|ml)?\b/i);
- return`<details data-k="x${x.id}" ${S.o['x'+x.id]?'open':''} style="flex:1 1 100%;box-shadow:none;padding:0;margin:0;background:none"><summary style="font-size:13px;color:#555;cursor:pointer">📦 Ranger au stock</summary>${formRng(x.nom,{},[],m?m[1]:'',m&&m[2]?m[2].toLowerCase():'pièce(s)','Ranger au stock')}</details>`}
-async function versStock(nom,q,u,lieu){lieu=lieu||'';
- const ex=ST.find(z=>norm(z.nom)==norm(nom)&&z.unite==u&&(z.lieu||'')==lieu);
- if(ex){ex.quantite=Math.round((ex.quantite+q)*100)/100;ecrireCache();await envoyer({t:'upd',table:'hf_stock',id:ex.id,patch:{quantite:ex.quantite}})}
- else{const tmp=-Date.now();ST.push({id:tmp,nom,quantite:q,unite:u,lieu});ecrireCache();await envoyer({t:'ins',table:'hf_stock',row:{nom,quantite:q,unite:u,lieu},tmp})}}
-function extras(){const t=norm(S.q);
- return`<div class="p"><div class="t">Autres achats</div><input id="xn" placeholder="Produit" autocomplete="off" style="flex:1 1 50%;width:auto">
- <input id="xq" placeholder="Qté" style="width:70px"><button data-a="scan" data-t="xn">📷</button><button data-a="ocr">📄 Liste papier</button><button data-a="exadd" style="padding:8px 18px;font-weight:700;background:#2e7d32;color:#fff;border-color:#2e7d32">AJOUTER</button><div class="scinfo i" style="flex:1 1 100%;text-align:left;padding:0"></div></div>`+
- EX.filter(x=>!t||norm(x.nom).includes(t)).map(x=>`<div class="p" data-xid="${x.id}"><label style="flex:1;${x.coche?'text-decoration:line-through;opacity:.55':''}">
- <input type="checkbox" data-a="xchk" ${x.coche?'checked':''} style="transform:scale(1.4);margin-right:8px"><b>${esc(x.nom)}</b> ${esc(x.qte)}</label><button data-a="xdel">✕</button>${xForm(x)}</div>`).join('')}
+function sug(m){const el=$('#sg');if(!el)return;const t=norm($('#sn')?.value);
+ if(m===false||(!t&&m!==true)){el.style.display='none';el.innerHTML='';return}
+ const seen=new Set();
+ const base=[...PR.map(p=>({nom:p.nom,u:p.poids_unite||''})),...ig().l,...ST.map(z=>({nom:z.nom,u:z.unite}))];
+ const l=base.filter(e=>{const k=norm(e.nom);if(seen.has(k)||(t&&!k.includes(t)))return false;seen.add(k);return true}).slice(0,8);
+ el.style.display=l.length?'block':'none';
+ el.innerHTML=l.map(e=>{const sk=ST.filter(z=>norm(z.nom)==norm(e.nom));
+  const inf=sk.length?`<span style="color:#2e7d32;font-size:13px"> · en stock : ${sk.map(z=>fq(z.quantite)+' '+esc(z.unite)+(z.lieu?' ('+esc(z.lieu)+')':'')).join(' + ')}</span>`:'';
+  return`<button data-a="pick" data-n="${esc(e.nom)}" data-u="${esc(e.u||'')}" style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #eee;border-radius:0;padding:12px;font-size:16px;background:transparent">${esc(e.nom)}${inf}</button>`}).join('')}
 function etat(x){const u={};x.l.forEach(y=>{u[y.i.u]=(u[y.i.u]||0)+(y.i.q==null?0:y.i.q*y.p.coef)});
  const sk=ST.filter(z=>norm(z.nom)==x.k);
  const r=Object.entries(u).map(([c,v])=>{const h=sk.filter(z=>z.unite==c).reduce((a,z)=>a+z.quantite,0);return{c,v,rest:Math.max(0,v-h)}});
@@ -305,13 +175,13 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='fav'||a=='fait'){await flag(id,a=='fav'?'favori':'deja_fait');if(S.m)paint();list()}
  else if(a=='add')add(id);
  else if(a=='pick'){const nom=b.dataset.n,e=ig().l.find(z=>z.nom==nom),su=$('#su');
-  const u=e?Object.entries(e.u).sort((x,y)=>y[1]-x[1])[0][0]:'';
+  const u=e&&e.u?Object.entries(e.u).sort((x,y)=>y[1]-x[1])[0][0]:(b.dataset.u||'');
   $('#sn').value=nom;if(u){if(![...su.options].some(o=>o.text==u))su.add(new Option(u));su.value=u}
-  $('#sq').focus();sug()}
+  $('#sq').focus();sug(false)}
  else if(a=='scan'){const t=b.dataset.t,code=await scanner();if(!code)return;SC=code;const pr=await nomProduit(code),nom=pr.nom;SCP=pr.poids?{poids:pr.poids,unite:pr.unite}:null;
   const inf=document.querySelector('.scinfo');if(inf)inf.innerHTML=nom?`Code ${esc(code)}${SCF?' ('+esc(SCF)+')':''} · produit reconnu${pr.poids?' · contenu '+pr.poids+' '+esc(pr.unite):''}`:`Code ${esc(code)}${SCF?' ('+esc(SCF)+')':''} · inconnu des bases : <a href="https://www.google.com/search?q=${encodeURIComponent(code)}" target="_blank" rel="noopener">🔎 chercher sur le web</a>, puis tape le nom ci-dessus`;
   $('#'+t).value=nom;if(pr.poids){if(t=='sn'){$('#sq').value=pr.poids;const su=$('#su');if(![...su.options].some(o=>o.text==pr.unite))su.add(new Option(pr.unite));su.value=pr.unite}else $('#xq').value=pr.poids+' '+pr.unite}
-  const q=nom?$(t=='sn'?'#sq':'#xq'):$('#'+t);if(q)q.focus();if(t=='sn')sug()}
+  const q=nom?$(t=='sn'?'#sq':'#xq'):$('#'+t);if(q)q.focus();if(t=='sn')sug(false)}
  else if(a=='exadd'){const nom=$('#xn').value.trim(),qte=$('#xq').value.trim();if(!nom)return;
   const tmp=-Date.now();EX.push({id:tmp,nom,qte,coche:false});list();ecrireCache();
   await envoyer({t:'ins',table:'hf_extras',row:{nom,qte},tmp});memo(nom)}
@@ -370,7 +240,7 @@ $('#q').addEventListener('input',e=>{S.q=e.target.value;list()});
 addEventListener('online',()=>{if(db)load()});
 setInterval(()=>{if(db&&(Q.length||HORS))load()},20000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-const VER='v12';
+const VER='v14';
 fetch('index.html',{cache:'no-store'}).then(r=>r.text()).then(t=>{const m=t.match(/VER=\x27([^\x27]+)\x27/);
  if(m&&m[1]!=VER){const d=document.createElement('div');d.style.cssText='position:fixed;bottom:60px;left:8px;right:8px;background:#222;color:#fff;padding:12px;border-radius:10px;z-index:30;text-align:center';
  d.textContent='🔄 Nouvelle version disponible — toucher pour recharger';d.onclick=()=>location.reload();document.body.appendChild(d)}}).catch(()=>{});
